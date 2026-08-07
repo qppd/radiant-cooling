@@ -20,7 +20,7 @@ flowchart TD
     G -->|Yes| H["Send set_pumps cmd to chiller over ESP-NOW"]
     G -->|No| I["Write telemetry + control values to Firebase"]
     H --> I
-    I --> J["Poll Firebase config paths for changes"]
+    I --> J["Stream: process radiant/config changes (realtime)"]
     J --> K{"Config changed?"}
     K -->|Yes| L["Apply locally or forward cmd/config to peer"]
     K -->|No| M["Reconnect Wi-Fi/Firebase if dropped"]

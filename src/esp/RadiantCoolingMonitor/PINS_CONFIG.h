@@ -16,4 +16,5 @@
 #include <Arduino.h>
 
 // ---- Pin map ----
-static const uint8_t PIN_ONE_WIRE = 18;   // 1-Wire bus (6x DS18B20) + 4.7k pull-up to 3V3
+static const uint8_t PIN_ONE_WIRE          = 18;   // 1-Wire bus (6x DS18B20) + 4.7k pull-up to 3V3
+static const uint8_t PIN_WIFI_RESET_BUTTON = 33;   // momentary button to GND (INPUT_PULLUP) - hold 3 s to erase saved WiFi credentials

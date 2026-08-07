@@ -38,8 +38,8 @@
 - **Sensors → cloud:** monitor reads sensors, receives ESP-NOW packets from
   the two controllers, and writes everything to Firebase.
 - **Cloud → plant:** the app writes commands/config to Firebase; the gateway
-  polls/streams those paths and forwards changes to the right board via
-  ESP-NOW.
+  streams those paths (real time) and forwards changes to the right board
+  via ESP-NOW.
 
 ## 2. Device IDs
 
@@ -197,7 +197,8 @@ computation (see §6 Data flows):
 
 ### Commands (app → plant)
 1. App writes `config/<node>` in Firebase.
-2. Gateway polls the `config` paths periodically (or uses a stream listener).
+2. The gateway **streams** `radiant/config` in real time (FirebaseClient
+   `stream()`) — changes arrive immediately, no polling.
 3. On change, the gateway applies `config/control` locally or forwards a
    `cmd`/`config` ESP-NOW message to the right peer.
 4. Peer applies the change and reports new `state` back.
@@ -227,8 +228,9 @@ Sensible defaults for this system:
 | `radiant/config/**`     | gateway         | app             |
 | `radiant/heartbeat/**`  | app             | gateway         |
 
-- The **gateway** authenticates with a Firebase Auth token (preferred) or the
-  legacy database secret. This is defined by the auth method the rules use.
+- The **gateway** authenticates via FirebaseClient — email/password or
+  anonymous sign-in (the corresponding provider must be enabled in Firebase
+  console → Auth).
 - The **app** authenticates via the Firebase SDK (anonymous or Google sign-in
   for personal use).
 - Rules are versioned alongside the data paths.

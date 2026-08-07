@@ -29,12 +29,13 @@ I/O with Wi-Fi and ESP-NOW running.
 | Board                   | Pin | Component                          | Notes                        |
 | ----------------------- | --- | ---------------------------------- | ---------------------------- |
 | `RadiantCoolingMonitor` | 18  | 1-Wire bus (6x DS18B20)            | 4.7kΩ pull-up to 3V3         |
+| `RadiantCoolingMonitor` | 33  | WiFi reset button                   | momentary switch to GND, INPUT_PULLUP; hold 3 s to erase WiFi credentials |
 | `WaterChillerController`| 19  | SSR → water pump 1                 | SSR input (see wiring note)  |
 | `WaterChillerController`| 21  | SSR → water pump 2                 | SSR input (see wiring note)  |
 | `WaterChillerController`| 22  | 1-Wire bus (1x DS18B20)            | 4.7kΩ pull-up to 3V3         |
 | `DehumidifierController`| 23  | SSR → dehumidifier                 | SSR input (see wiring note)  |
 | `DehumidifierController`| 32  | DHT22 data                         | 10kΩ pull-up to 3V3          |
-| (spare)                 | 33  | —                                  | available on all boards      |
+| (spare)                 | 19, 21, 22, 23, 32    | —                         | free on the gateway board   |
 
 ## Wiring notes
 
@@ -45,11 +46,26 @@ I/O with Wi-Fi and ESP-NOW running.
 - **SSR modules:** most SSR modules have an input that can be driven directly
   from a 3.3V GPIO (3-32V DC input). Confirm the module's input spec; if it
   needs more drive, buffer with a transistor/MOSFET.
-- **ESP-NOW needs no pins** — it uses the radio. All boards run in STA mode
-  (the gateway on the router channel; peers match that channel).
+- **WiFi reset button:** a momentary push button wired from GPIO 33 to GND
+  (the internal pull-up is enabled in code). Hold for ~3 s to erase the
+  saved WiFi credentials (WiFiManager) and restart — a captive portal then
+  opens for new SSID/password. Holding it at power-up also erases the
+  credentials (the portal opens without a restart).
+- **ESP-NOW needs no pins** — it uses the radio. All boards run in STA mode.
+- **Channel lock with WiFiManager:** the gateway connects to the router's
+  channel automatically, so its ESP-NOW channel is whatever the router uses.
+  The peers (STA mode, not associated) default to channel 1 and will not
+  hear the gateway unless they match — **fix the router to channel 1, 6, or
+  11** and/or configure the peers' channel to match the gateway.
 
 ## Power
 
 Each board is fed from its own 3.3V regulator (onboard). Do **not** power
 sensors or SSR inputs from the 5V pin. Total GPIO sink/source is shared — use
 an external supply for the pump/dehumidifier loads (the SSR isolates them).
+
+## References
+
+- ESP32 38-pin pinout, boot & Wi-Fi conflicts: [`references/esp32-38pin-pinout.md`](../../references/esp32-38pin-pinout.md)
+- SSR wiring: [`references/solid-state-relay.md`](../../references/solid-state-relay.md)
+- DS18B20 / DHT22 pull-up notes: [`references/ds18b20-temperature-sensor.md`](../../references/ds18b20-temperature-sensor.md), [`references/dht22-humidity-sensor.md`](../../references/dht22-humidity-sensor.md)

@@ -1,28 +1,63 @@
 /*
  * FirebaseSync.h - cloud module
  *
- * Wraps the FirebaseClient library (Mobizt) for the Firebase Realtime
- * Database. Gateway-only: writes telemetry/state, polls config, heartbeat.
+ * Wraps the Mobizt FirebaseClient library (async) for Firebase Realtime
+ * Database on the gateway board. Works in BOTH directions:
+ *   - SAVE:    setJson() / updateJson() - write telemetry/state to Firebase
+ *   - RECEIVE: stream() - realtime listener on a path (e.g. radiant/config)
  *
- * NOTE: the old Firebase-ESP-Client library is deprecated - use the
- * FirebaseClient library from the Arduino Library Manager.
+ * All operations are non-blocking: writes are queued when ready(), and
+ * loop() must be called every main-loop cycle so the async client keeps
+ * processing (network, auth token, stream heartbeats). The stream is
+ * auto-started by loop() once the (async) auth sign-in completes, and it
+ * re-arms itself if the connection drops.
+ *
+ * NOTE: the old Firebase-ESP-Client library is deprecated - this module
+ * targets the FirebaseClient library from the Arduino Library Manager.
  */
 #pragma once
 #include <Arduino.h>
-#include <stdint.h>
+#include <FirebaseClient.h>
 
 class FirebaseSync {
 public:
-  FirebaseSync(const char* url, const char* secret);
+  struct Config {
+    const char* url      = nullptr;   // e.g. "https://<project>-default-rtdb.firebaseio.com/"
+    const char* apiKey   = nullptr;   // Web API key
+    const char* email    = nullptr;   // "" or nullptr = anonymous sign-in
+    const char* password = nullptr;   // email/password auth
+  };
 
-  void begin();                              // Wi-Fi + Firebase auth setup
-  void loop();                               // keep async client alive
+  // Stream event callback: path (changed node) + json (new value).
+  typedef void (*StreamCb)(const char* path, const String& json);
 
-  bool setJson(const char* path, const char* json);   // write a node
-  bool getString(const char* path, String& out);      // read a node
-  bool connected() const;
+  FirebaseSync();
+  ~FirebaseSync();
+
+  void begin(const Config& cfg);            // init network, app, auth, database
+  void loop();                              // background async processing
+  bool ready() const;                       // app ready AND client not busy
+  bool connected() const;                   // app signed in
+
+  // --- SAVE (send to Firebase) ---
+  bool setJson(const char* path, const String& json);     // overwrite node
+  bool updateJson(const char* path, const String& json);  // partial update
+
+  // --- RECEIVE (realtime stream from Firebase) ---
+  // Remembers the path/callback; loop() starts the stream when ready.
+  bool stream(const char* path, StreamCb cb);
 
 private:
-  const char* _url;
-  const char* _secret;
+  static void _streamEventCb(firebase::AsyncResult& aResult);
+  static void _streamTimeoutCb(bool& timeout);
+
+  firebase::DefaultNetwork _network;
+  firebase::UserAuth _userAuth;
+  firebase::FirebaseApp _app;
+  firebase::AsyncClientClass _aClient;
+  firebase::RealtimeDatabase _rtdb;
+
+  const char* _streamPath = nullptr;
+  StreamCb _streamCb = nullptr;
+  bool _streamActive = false;
 };

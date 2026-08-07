@@ -32,6 +32,10 @@ flowchart LR
         DHT["1x DHT22<br/>(temp + humidity)"]
     end
 
+    subgraph BTN["Control"]
+        RESET["WiFi Reset Button<br/>(hold 3 s)"]
+    end
+
     subgraph ACT["Actuators (SSR)"]
         P1["Water Pump 1"]
         P2["Water Pump 2"]
@@ -55,6 +59,7 @@ flowchart LR
     GW <-->|"ESP-NOW"| DHC
 
     GW ---|"1-Wire"| T6
+    GW ---|"GPIO 33"| RESET
     WCC ---|"1-Wire"| T1
     DHC ---|"DHT"| DHT
 
@@ -85,6 +90,7 @@ flowchart LR
 | 6x DS18B20               | Sensor              | Water supply/return + room temperatures (monitor)    |
 | 1x DS18B20               | Sensor              | Chiller loop water temperature                       |
 | 1x DHT22                 | Sensor              | Temperature + humidity for dew-point control         |
+| WiFi reset button        | Control             | GPIO 33 → GND; hold 3 s to erase WiFi credentials    |
 | Water pumps (2)          | Actuator            | Circulate chilled water (SSR-controlled)             |
 | Dehumidifier             | Actuator            | Removes humidity (SSR-controlled)                    |
 | Power supply             | Power               | Feeds all three controllers                          |

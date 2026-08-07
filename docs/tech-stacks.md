@@ -11,6 +11,7 @@
 | Build      | Arduino IDE                                       | One sketch per controller; ESP32 core via Board Manager |
 | Framework  | Arduino (`esp32` core)                            | Decided: Arduino IDE + Arduino framework           |
 | Mesh       | **ESP-NOW** (built into the ESP32 core)           | Board-to-board comms, no router/broker required    |
+| WiFi       | **WiFiManager** (tzapu) — gateway only            | Captive-portal provisioning; no hardcoded SSID/password |
 | Cloud      | **FirebaseClient** (Mobizt) — gateway only        | Async Firebase Realtime Database REST client; the older Firebase-ESP-Client is deprecated || Encoding    | ArduinoJson                                       | Compact JSON payloads (≤ 250 B) over ESP-NOW    |
 | Sensors     | OneWire / DallasTemperature, DHT                  | Install via Arduino Library Manager              |
 | Code layout | One class module per component + per library      | See [`src/esp/README.md`](../src/esp/README.md)  |
@@ -32,7 +33,7 @@
 | Board-to-cloud  | HTTPS REST to Firebase RTDB         | Gateway board only                    |
 | Cloud database  | Firebase Realtime Database          | JSON tree; path scheme in `api.md`    |
 | Weather data    | WeatherAPI.com (free tier)          | Gateway polls `current.dewpoint_c` / `temp_c` / `humidity` |
-| Provisioning    | BLE (optional) / serial             | Wi-Fi credentials + peer MACs         |
+| Provisioning    | WiFiManager captive portal (gateway)| Enter SSID/password once; reset button (GPIO 33) to re-provision |
 
 ## Documentation
 
@@ -63,3 +64,9 @@
 - **Cloud Firestore** instead of Realtime Database — richer app queries, but
   much harder for ESP32 to authenticate against; RTDB is the ESP32-friendly
   choice.
+
+## References
+
+Per-topic reference material lives in [`references/`](../references/) —
+ESP-NOW, FirebaseClient, WiFiManager, sensors, SSR, WeatherAPI, ESP32
+pinout, dew point, and toolchain guides.

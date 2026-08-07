@@ -22,9 +22,10 @@ only (wiring + control logic).
 ├── TemperatureSensor.{h,cpp}   # component: DS18B20   (wraps OneWire + DallasTemperature)
 ├── HumiditySensor.{h,cpp}      # component: DHT22     (wraps DHT)
 ├── SsrOutput.{h,cpp}           # component: SSR output (wraps Arduino digital I/O)
+├── WifiProvisioner.{h,cpp}     # wifi:     WiFiManager captive portal (wraps WiFiManager) [gateway only]
 ├── EspNowTransport.{h,cpp}     # comms:    ESP-NOW    (wraps WiFi + esp_now)
 ├── JsonProtocol.{h,cpp}        # protocol: JSON envelope (wraps ArduinoJson)
-├── FirebaseSync.{h,cpp}        # cloud:    Firebase RTDB (wraps FirebaseClient) [gateway only]
+├── FirebaseSync.{h,cpp}        # cloud:    Firebase RTDB set/update + realtime stream (wraps FirebaseClient) [gateway only]
 ├── WeatherApi.{h,cpp}          # cloud:    WeatherAPI.com current weather (wraps HTTPClient) [gateway only]
 └── ClimateControl.{h,cpp}      # control:  dew point + pump decision [gateway only]
 ```
@@ -44,6 +45,7 @@ Each board only includes the modules it needs:
 | `TemperatureSensor`  | ✅ (6x)           | ✅ (1x) | —            |
 | `HumiditySensor`     | —                 | —       | ✅           |
 | `SsrOutput`          | —                 | ✅ (×2) | ✅           |
+| `WifiProvisioner`    | ✅                | —       | —            |
 | `EspNowTransport`    | ✅                | ✅      | ✅           |
 | `JsonProtocol`       | ✅                | ✅      | ✅           |
 | `FirebaseSync`       | ✅                | —       | —            |
@@ -67,10 +69,22 @@ if the duplication becomes a burden.
 | `DHT sensor library`| dehumidifier    | DHT22                                             |
 | `ArduinoJson`       | all             | v7 (`JsonDocument`)                               |
 | `FirebaseClient`    | monitor         | Mobizt; the old `Firebase-ESP-Client` is deprecated |
+| `WiFiManager`       | monitor         | tzapu - captive-portal WiFi provisioning            |
 
 ESP-NOW (`esp_now.h`), WiFi, and `HTTPClient` (used by `WeatherApi`) are
 built into the Arduino ESP32 core. A **WeatherAPI.com API key** is required
 in the gateway's `Config.h` (`WEATHER_API_KEY`).
+
+WiFi credentials are **not** stored in code — they are entered once through
+the WiFiManager captive portal (AP `RadiantCooling-AP`). Hold the gateway's
+reset button (GPIO 33, see `PINS_CONFIG.h`) for ~3 s to erase them and
+re-provision.
+
+Firebase is **two-way** on the gateway (Mobizt `FirebaseClient`, async):
+`setJson()`/`updateJson()` write telemetry/state to `radiant/telemetry/*`,
+and `stream()` listens to `radiant/config` in real time. Enable **Anonymous**
+or **Email/Password** auth in the Firebase console and put the Web API key
+in `FIREBASE_API_KEY` (see `Config.h`).
 
 ## Working with the sketches
 
@@ -78,8 +92,9 @@ in the gateway's `Config.h` (`WEATHER_API_KEY`).
 2. Install the libraries above.
 3. Open each board folder as a sketch in Arduino IDE, set the right board
    and COM port, and upload.
-4. Fill in `Config.h` (credentials + MACs) and check `PINS_CONFIG.h` (pins)
-   before flashing.
+4. Fill in `Config.h` (Firebase + Weather keys + peer/gateway MACs) and check
+   `PINS_CONFIG.h` (pins) before flashing. WiFi credentials are entered via
+   the captive portal on first boot - nothing to fill in.
 
 ## References
 
@@ -88,3 +103,4 @@ in the gateway's `Config.h` (`WEATHER_API_KEY`).
 - Control logic: [`docs/diagrams/flow-chart.md`](../../docs/diagrams/flow-chart.md)
 - ESP-NOW + Firebase protocol: [`docs/api.md`](../../docs/api.md)
 - Pin map (38-pin board, boot/Wi-Fi-safe): [`docs/schematic/pin-map.md`](../../docs/schematic/pin-map.md)
+- References (ESP-NOW, Firebase, sensors, WiFiManager…): [`references/`](../../references/)
