@@ -17,8 +17,9 @@ only (wiring + control logic).
 ```
 <BoardName>/
 ├── <BoardName>.ino     # glue: instantiate components, setup()/loop(), control logic
-├── Config.h            # board config (MACs, credentials, constants); includes PINS_CONFIG.h
+├── Config.h            # board config (MACs, Firebase keys, constants); includes PINS_CONFIG.h + WEATHER_CONFIG.h
 ├── PINS_CONFIG.h       # pin assignments - all GPIO wiring for the board
+├── WEATHER_CONFIG.h    # WeatherAPI credentials (GIT-IGNORED; copy from WEATHER_CONFIG.example.h)
 ├── TemperatureSensor.{h,cpp}   # component: DS18B20   (wraps OneWire + DallasTemperature)
 ├── HumiditySensor.{h,cpp}      # component: DHT22     (wraps DHT)
 ├── SsrOutput.{h,cpp}           # component: SSR output (wraps Arduino digital I/O)
@@ -92,9 +93,11 @@ in `FIREBASE_API_KEY` (see `Config.h`).
 2. Install the libraries above.
 3. Open each board folder as a sketch in Arduino IDE, set the right board
    and COM port, and upload.
-4. Fill in `Config.h` (Firebase + Weather keys + peer/gateway MACs) and check
-   `PINS_CONFIG.h` (pins) before flashing. WiFi credentials are entered via
-   the captive portal on first boot - nothing to fill in.
+4. Fill in the config headers before flashing: `Config.h` (Firebase keys +
+   peer/gateway MACs), `WEATHER_CONFIG.h` (WeatherAPI key - copy from
+   `WEATHER_CONFIG.example.h`; it is git-ignored), and check `PINS_CONFIG.h`
+   (pins). WiFi credentials are entered via the captive portal on first
+   boot - nothing to fill in.
 
 ## References
 

@@ -126,8 +126,8 @@ computation (see §6 Data flows):
 - **Fields used:** `current.temp_c`, `current.humidity`, `current.dewpoint_c`
 - **Throttle:** free tier has a daily call budget — keep the gateway's
   `WEATHER_POLL_S` conservative (default 900 s = 15 min).
-- Credentials live in the gateway's `Config.h` (`WEATHER_API_KEY`,
-  `WEATHER_LOCATION`).
+- Credentials live in the gateway's `WEATHER_CONFIG.h` (git-ignored -
+  copy from `WEATHER_CONFIG.example.h`).
 
 ## 5. ESP-NOW protocol
 

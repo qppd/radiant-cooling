@@ -60,12 +60,16 @@ I/O with Wi-Fi and ESP-NOW running.
 
 ## Power
 
-Each board is fed from its own 3.3V regulator (onboard). Do **not** power
-sensors or SSR inputs from the 5V pin. Total GPIO sink/source is shared — use
-an external supply for the pump/dehumidifier loads (the SSR isolates them).
+Each board is fed by its **own** AC-DC power supply: **220 V AC → 5 V DC,
+3 A**, connected to the board's `5V`/`VIN` pin (the onboard regulator steps
+it down to 3.3 V). There is **no shared rail between boards** — each board
+is galvanically isolated. Do **not** power sensors or SSR inputs from the 5V
+pin. Total GPIO sink/source is shared — use the SSR to switch the
+pump/dehumidifier mains loads (the SSR isolates them from the ESP32).
 
 ## References
 
 - ESP32 38-pin pinout, boot & Wi-Fi conflicts: [`references/esp32-38pin-pinout.md`](../../references/esp32-38pin-pinout.md)
+- Power supplies: [`references/power-supply.md`](../../references/power-supply.md)
 - SSR wiring: [`references/solid-state-relay.md`](../../references/solid-state-relay.md)
 - DS18B20 / DHT22 pull-up notes: [`references/ds18b20-temperature-sensor.md`](../../references/ds18b20-temperature-sensor.md), [`references/dht22-humidity-sensor.md`](../../references/dht22-humidity-sensor.md)

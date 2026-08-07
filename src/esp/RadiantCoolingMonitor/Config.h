@@ -8,6 +8,7 @@
 #pragma once
 #include <Arduino.h>
 #include "PINS_CONFIG.h"
+#include "WEATHER_CONFIG.h"   // WeatherAPI credentials (git-ignored)
 
 // ---- Device identity (see docs/api.md) ----
 static const char DEVICE_ID[] = "monitor";
@@ -26,9 +27,7 @@ static const char FIREBASE_PASSWORD[] = "";                     // email/passwor
 static const uint8_t PEER_CHILLER[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 static const uint8_t PEER_DEHUM[]   = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
-// ---- Weather API (WeatherAPI.com) ----
-static const char WEATHER_API_KEY[]  = "your-weatherapi-key";
-static const char WEATHER_LOCATION[] = "your-city";
+// ---- Weather API (credentials live in WEATHER_CONFIG.h) ----
 static const uint16_t WEATHER_POLL_S = 900;    // weather refresh interval (s)
 
 // ---- Fixed constants ----

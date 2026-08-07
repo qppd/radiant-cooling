@@ -77,6 +77,11 @@ Desktop.ini
 *.p12
 secrets/
 
+# ===== ESP32 per-sketch credentials =====
+# Keep real API keys local; commit only the .example template.
+src/esp/**/WEATHER_CONFIG.h
+!.example.h
+
 # ===== Logs & temporary files =====
 *.log
 logs/

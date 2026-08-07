@@ -16,8 +16,10 @@
 
 ```mermaid
 flowchart LR
-    subgraph PWR["Power"]
-        PS["Power Supply"]
+    subgraph PWR["Power (220V AC → 5V / 3A, one per board)"]
+        PS1["PSU 1"]
+        PS2["PSU 2"]
+        PS3["PSU 3"]
     end
 
     subgraph CTRL["ESP32 Controllers (ESP-NOW)"]
@@ -51,9 +53,9 @@ flowchart LR
         UI["RadiantCooling App<br/>(Flutter - Android)"]
     end
 
-    PS --> GW
-    PS --> WCC
-    PS --> DHC
+    PS1 --> GW
+    PS2 --> WCC
+    PS3 --> DHC
 
     GW <-->|"ESP-NOW"| WCC
     GW <-->|"ESP-NOW"| DHC
@@ -93,7 +95,7 @@ flowchart LR
 | WiFi reset button        | Control             | GPIO 33 → GND; hold 3 s to erase WiFi credentials    |
 | Water pumps (2)          | Actuator            | Circulate chilled water (SSR-controlled)             |
 | Dehumidifier             | Actuator            | Removes humidity (SSR-controlled)                    |
-| Power supply             | Power               | Feeds all three controllers                          |
+| Power supplies (3)       | Power               | One 220V→5V/3A supply per board (isolated)           |
 | Firebase RTDB            | Cloud               | Shared database for app and firmware                 |
 | WeatherAPI.com           | Cloud               | Outdoor dew point + temperature for pump control     |
 | `RadiantCooling` app     | App                 | Monitoring and configuration UI (Android)            |

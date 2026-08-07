@@ -14,6 +14,7 @@
 | [`solid-state-relay.md`](solid-state-relay.md) | SSR switching (pumps, dehumidifier) |
 | [`weatherapi-com.md`](weatherapi-com.md) | WeatherAPI.com current-weather API |
 | [`esp32-38pin-pinout.md`](esp32-38pin-pinout.md) | 38-pin ESP32 pinout, boot/strapping & Wi-Fi conflicts |
+| [`power-supply.md`](power-supply.md) | 220V → 5V/3A supply (one per board) |
 | [`dew-point-magnus.md`](dew-point-magnus.md) | Magnus-formula dew point calculation |
 | [`arduino-ide-esp32.md`](arduino-ide-esp32.md) | Arduino IDE + ESP32 setup guide |
 | [`flutter-android-firebase.md`](flutter-android-firebase.md) | Flutter Android + Firebase SDK |

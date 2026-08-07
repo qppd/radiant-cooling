@@ -16,7 +16,8 @@
 ## How it is used here
 
 - `WeatherApi` module (gateway only) wraps `HTTPClient` + ArduinoJson:
-  - builds the URL from `WEATHER_API_KEY` / `WEATHER_LOCATION` (`Config.h`)
+  - builds the URL from `WEATHER_API_KEY` / `WEATHER_LOCATION`, defined in
+    `WEATHER_CONFIG.h` (git-ignored; copy from `WEATHER_CONFIG.example.h`)
   - parses `current.temp_c`, `current.humidity`, `current.dewpoint_c`
   - called throttled from the main loop (`WEATHER_POLL_S`)
 - The outdoor dew point is combined with the indoor dew point (DHT22) —

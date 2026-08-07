@@ -100,6 +100,10 @@ Full diagrams: [`docs/diagrams/`](docs/diagrams/) · [`docs/schematic/pin-map.md
 All pins are boot/Wi-Fi-safe for the 38-pin ESP32 variant — see the
 [pin map](docs/schematic/pin-map.md).
 
+Each board is powered by its **own** AC-DC supply (**220 V AC → 5 V DC,
+3 A**, feeding the `5V`/`VIN` pin) — no shared rail between boards, see
+[`references/power-supply.md`](references/power-supply.md).
+
 ## Repository Structure
 
 ```
