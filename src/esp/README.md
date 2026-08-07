@@ -89,6 +89,24 @@ or **Email/Password** auth in the Firebase console and put the Web API key
 in `FIREBASE_CONFIG.h` (`FIREBASE_API_KEY`; copy from
 `FIREBASE_CONFIG.example.h` — it is git-ignored).
 
+## Implemented behavior
+
+- **ESP-NOW receive** on every board is decoupled through a FreeRTOS queue:
+  the callback only enqueues raw bytes; `loop()` drains, decodes
+  (`JsonProtocol`), and applies/handles the message.
+- **Gateway** caches the latest peer readings for the chiller computation,
+  forwards peer `telemetry`/`state` to Firebase, publishes its own
+  telemetry + a retained heartbeat (`radiant/heartbeat/monitor`, includes
+  the Wi-Fi channel), sends `set_pumps` on decision changes, and applies or
+  forwards `radiant/config` stream changes.
+- **Chiller** executes `set_pumps` (`on`/`off`), reports a `state` message
+  on pump changes, and streams `water_temp_c` telemetry every
+  `TELEMETRY_S`.
+- **Dehumidifier** applies `config` (setpoint/deadband) and `cmd`
+  (`set_humidity_target`, `enable`/`disable`, `reset`), runs the 55 %%RH
+  hysteresis loop, and streams `temp_c`/`humidity_pct` telemetry. After 3
+  consecutive sensor read failures it fails safe (dehumidifier off).
+
 ## Working with the sketches
 
 1. Add the ESP32 board manager URL and install "esp32 by Espressif".

@@ -201,8 +201,8 @@ are next on the roadmap.
 
 ## Roadmap
 
-- [ ] Implement remaining firmware TODOs (ESP-NOW handlers, telemetry encode/send)
-- [ ] Wire the `onConfigStream` handler (control params + peer forwarding)
+- [x] ESP-NOW handlers + telemetry (receive queue, cmd/config processing, heartbeat) on all three boards
+- [x] Wire the `onConfigStream` handler (control params + peer forwarding)
 - [ ] Flutter app: Firebase SDK, dashboard, control screens
 - [ ] Firebase security rules file in `docs/`
 - [ ] `LICENSE` file

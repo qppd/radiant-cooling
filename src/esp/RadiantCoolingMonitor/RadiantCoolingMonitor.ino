@@ -37,6 +37,10 @@
 #include "WeatherApi.h"
 #include "ClimateControl.h"
 
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <time.h>
+
 // ---- Components ----
 TemperatureSensor loopTemps(PIN_ONE_WIRE, TEMP_COUNT);
 WifiProvisioner wifi(WIFI_AP_NAME, PIN_WIFI_RESET_BUTTON);
@@ -56,23 +60,118 @@ ControlParams  params;       // defaults; updated from the config stream
 bool pumpsOn = false;
 
 // ESP-NOW receive -> Firebase write is decoupled via a FreeRTOS queue:
-//   QueueHandle_t espNowQueue;   // created in setup(), drained in loop()
-// The ESP-NOW receive callback must ONLY enqueue (never block / call
-// Firebase inside the callback).
+// the receive callback ONLY enqueues raw bytes (never blocks / decodes /
+// calls Firebase inside the callback); loop() drains and processes.
+
+typedef struct {
+  uint8_t mac[6];
+  uint8_t data[250];         // ESP-NOW max payload
+  size_t  len;
+} EspNowRxPacket;
+QueueHandle_t espNowQueue;
+
+// ---- Helpers ----
+
+// Unix time once NTP syncs; uptime seconds as a fallback.
+uint32_t nowUnix() {
+  time_t t = time(nullptr);
+  return t > 1000000000UL ? (uint32_t)t : (uint32_t)(millis() / 1000UL);
+}
+
+// Encode + send a JSON message to one peer.
+void sendTo(const uint8_t* mac, MsgType type, const JsonDocument& payload) {
+  char buf[250];
+  size_t n = JsonProtocol::encode(type, DEVICE_ID, ++seq, payload, buf, sizeof(buf));
+  // n == maxLen means the JSON was truncated (serializeJson caps at maxLen).
+  if (n > 0 && n < sizeof(buf)) espNow.sendTo(mac, (const uint8_t*)buf, n);
+}
+
+// Gateway -> chiller: set_pumps command.
+void sendPumpCmd(bool on) {
+  JsonDocument payload;
+  payload["cmd"]   = "set_pumps";
+  payload["value"] = on ? "on" : "off";
+  sendTo(PEER_CHILLER, MsgType::Cmd, payload);
+  Serial.printf("[gateway] cmd chiller: set_pumps %s\n", on ? "on" : "off");
+}
+
+// ---- ESP-NOW receive callback: enqueue only, do not block ----
+void handleMessage(const uint8_t* mac, const uint8_t* data, size_t len) {
+  if (len == 0 || len > 250 || !espNowQueue) return;
+  EspNowRxPacket pkt;
+  memcpy(pkt.mac, mac, 6);
+  memcpy(pkt.data, data, len);
+  pkt.len = len;
+  // esp_now callbacks run in the espnow TASK context, so xQueueSend is correct.
+  if (xQueueSend(espNowQueue, &pkt, 0) != pdTRUE) {
+    Serial.println("[espnow] RX queue full - packet dropped");
+  }
+}
+
+// ---- Process one decoded message from a peer ----
+void handleIncoming(IncomingMessage& msg) {
+  Serial.printf("[espnow] rx type=%d src=%s seq=%u\n",
+                (int)msg.type, msg.src.c_str(), msg.seq);
+
+  if (msg.type == MsgType::Telemetry) {
+    // Cache the latest peer readings for the chiller control computation.
+    if (msg.src == "dh") {
+      inputs.indoorTempC       = msg.data["temp_c"] | -100.0f;
+      inputs.indoorHumidityPct = msg.data["humidity_pct"] | 0.0f;
+    } else if (msg.src == "chiller") {
+      inputs.waterTempC = msg.data["water_temp_c"] | -100.0f;
+    }
+    // Forward to Firebase: radiant/telemetry/<src>/latest (stamped ts)
+    msg.data["ts"] = nowUnix();
+    String path = "/radiant/telemetry/" + msg.src + "/latest";
+    char json[512];
+    serializeJson(msg.data, json, sizeof(json));
+    cloud.setJson(path.c_str(), json);
+  } else if (msg.type == MsgType::State) {
+    // Forward to Firebase: radiant/state/<src>
+    String path = "/radiant/state/" + msg.src;
+    char json[256];
+    serializeJson(msg.data, json, sizeof(json));
+    cloud.setJson(path.c_str(), json);
+  } else if (msg.type == MsgType::Status && msg.src == "chiller") {
+    // Peer booted after us - re-send the current pump state so it converges.
+    sendPumpCmd(pumpsOn);
+  }
+  // Other messages (status from dh, unknown) are logged only.
+}
 
 // ---- Firebase realtime stream handler (radiant/config) ----
 void onConfigStream(const char* path, const String& json) {
   Serial.printf("[config] %s -> %s\n", path, json.c_str());
 
-  // TODO: apply per path (see docs/api.md - radiant/config tree):
-  //   "/radiant/config/control/params" -> update ControlParams
-  //       { comfort_setpoint_c, dewpoint_margin_c, weather_cool_temp_c }
-  //   "/radiant/config/dh"             -> forward set_humidity_target to
-  //       the dehumidifier over ESP-NOW
+  JsonDocument doc;
+  if (deserializeJson(doc, json) != DeserializationError::Ok) return;
+
+  // /radiant/config/control/params (+ children) -> update chiller control params
+  if (strncmp(path, "/radiant/config/control/params", 30) == 0) {
+    if (doc["comfort_setpoint_c"].is<float>())
+      params.comfortSetpointC = doc["comfort_setpoint_c"];
+    if (doc["dewpoint_margin_c"].is<float>())
+      params.dewPointMarginC = doc["dewpoint_margin_c"];
+    if (doc["weather_cool_temp_c"].is<float>())
+      params.weatherCoolTempC = doc["weather_cool_temp_c"];
+    Serial.printf("[config] control params: setpoint=%.1f margin=%.1f weather=%.1f\n",
+                  params.comfortSetpointC, params.dewPointMarginC,
+                  params.weatherCoolTempC);
+  }
+  // /radiant/config/dh (+ children) -> forward dehumidifier config over ESP-NOW
+  else if (strncmp(path, "/radiant/config/dh", 18) == 0) {
+    JsonDocument payload;
+    payload["humidity_setpoint_pct"] = doc["humidity_setpoint_pct"] | 55.0f;
+    payload["humidity_deadband_pct"] = doc["humidity_deadband_pct"] | 5.0f;
+    sendTo(PEER_DEHUM, MsgType::Config, payload);
+  }
 }
 
 void setup() {
   Serial.begin(115200);
+
+  espNowQueue = xQueueCreate(8, sizeof(EspNowRxPacket));
 
   loopTemps.begin();
 
@@ -83,6 +182,7 @@ void setup() {
     Serial.println("WiFi not connected - connect to AP 'RadiantCooling-AP' to configure");
     ESP.restart();
   }
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");   // for telemetry ts
 
   if (!espNow.begin()) {
     Serial.println("ESP-NOW init failed");
@@ -92,10 +192,10 @@ void setup() {
   // Wi-Fi channel (whatever channel the router uses). The ESP-NOW peers sit
   // on channel 1 by default, so fix the router to 1/6/11 and/or configure
   // the peers' channel to match - otherwise they won't hear the gateway.
-  // TODO: publish this channel to Firebase (heartbeat) so peers can sync.
+  // The gateway's channel is published in the heartbeat for reference.
   espNow.addPeer(PEER_CHILLER);
   espNow.addPeer(PEER_DEHUM);
-  // TODO: espNow.onReceive(handleMessage);  // enqueue, do not block
+  espNow.onReceive(handleMessage);   // enqueue only - decoded in loop()
 
   // Firebase (async): auth + realtime stream on the config path.
   // The stream auto-starts in cloud.loop() once sign-in completes.
@@ -104,8 +204,6 @@ void setup() {
   };
   cloud.begin(fbCfg);
   cloud.stream("/radiant/config", onConfigStream);
-
-  // TODO: publish retained heartbeat + status to Firebase (radiant/heartbeat/monitor)
 }
 
 void loop() {
@@ -126,8 +224,15 @@ void loop() {
     float t = loopTemps.readC(i);
     if (t > inputs.hottestRoomC) inputs.hottestRoomC = t;
   }
-  // TODO: inputs.indoorTempC / indoorHumidityPct <- latest dh telemetry
-  // TODO: inputs.waterTempC                      <- latest chiller telemetry
+
+  // Drain the ESP-NOW RX queue: peer telemetry/state/status
+  EspNowRxPacket pkt;
+  while (espNowQueue && xQueueReceive(espNowQueue, &pkt, 0) == pdTRUE) {
+    IncomingMessage msg;
+    if (JsonProtocol::decode((const char*)pkt.data, pkt.len, msg)) {
+      handleIncoming(msg);
+    }
+  }
 
   // Weather refresh (throttled - see WEATHER_POLL_S)
   if (millis() - lastWeatherMs >= WEATHER_POLL_S * 1000UL) {
@@ -141,21 +246,35 @@ void loop() {
   ControlDecision d = ClimateControl::decidePumps(inputs, params, pumpsOn);
   if (d.pumpsOn != pumpsOn) {
     pumpsOn = d.pumpsOn;
-    // TODO: send cmd to chiller over ESP-NOW:
-    //       { "cmd": "set_pumps", "value": pumpsOn ? "on" : "off" }
+    sendPumpCmd(pumpsOn);
   }
 
-  // ---- SAVE: telemetry to Firebase (non-blocking) ----
+  // ---- SAVE: telemetry + heartbeat to Firebase (non-blocking) ----
   if (millis() - lastPublishMs >= TELEMETRY_S * 1000UL) {
     lastPublishMs = millis();
-    // TODO: build telemetry JSON (see docs/api.md - radiant/telemetry/monitor/latest):
-    //   { "temps_c": [...], "dew_point_c": d.refDewPointC,
-    //     "water_floor_c": d.waterFloorC, "pumps": ..., "ts": ... }
-    // cloud.setJson("/radiant/telemetry/monitor/latest", telemetryJson);
+
+    // radiant/telemetry/monitor/latest
+    JsonDocument tel;
+    JsonArray temps = tel["temps_c"].to<JsonArray>();
+    for (uint8_t i = 0; i < loopTemps.count(); i++) temps.add(loopTemps.readC(i));
+    tel["dew_point_c"]   = d.refDewPointC;
+    tel["water_floor_c"] = d.waterFloorC;
+    tel["pumps"]         = pumpsOn ? "on" : "off";
+    tel["ts"]            = nowUnix();
+    char json[512];
+    serializeJson(tel, json, sizeof(json));
+    cloud.setJson("/radiant/telemetry/monitor/latest", json);
+
+    // Retained heartbeat (also exposes the Wi-Fi channel for peer sync)
+    JsonDocument hb;
+    hb["online"]   = true;
+    hb["firmware"] = "0.1.0";
+    hb["channel"]  = WiFi.channel();
+    hb["ts"]       = nowUnix();
+    char hbJson[256];
+    serializeJson(hb, hbJson, sizeof(hbJson));
+    cloud.setJson("/radiant/heartbeat/monitor", hbJson);
   }
 
-  // TODO: drain espNowQueue -> decode with JsonProtocol ->
-  //       cloud.setJson("/radiant/telemetry/<src>/latest", json);
-  // NOTE: the config stream re-arms automatically inside cloud.loop().
   delay(100);
 }

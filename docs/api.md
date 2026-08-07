@@ -95,6 +95,10 @@ radiant/
 { "temp_c": 24.3, "humidity_pct": 52.0, "ts": 1786119829 }
 ```
 
+> `ts` is stamped by the **gateway** (NTP time once synced, uptime-seconds
+> as a fallback) when it forwards peer telemetry to Firebase — peers send
+> the raw payload without a timestamp.
+
 ### 3.2 `state/<device>`
 
 ```json
