@@ -1,0 +1,86 @@
+# ===== Build artifacts =====
+build/
+dist/
+out/
+bin/
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+*.exe
+*.dll
+*.so
+
+# ===== ESP32 firmware (PlatformIO / Arduino) =====
+.pio/
+.pioenvs/
+.piolibdeps/
+.pio/libdeps/
+.pio/build/
+build_*/
+libraries/
+*.ino.local
+*.ino.with_bootloader.bin
+*.ino.with_bootloader.hex
+
+# ===== App (Flutter/Dart) =====
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub/
+.pub-cache/
+pubspec.lock
+.android/
+.ios/
+*.iml
+
+# ===== Node.js =====
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+
+# ===== IDE / Editor =====
+.idea/
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# ===== OS files =====
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# ===== Environment & secrets =====
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+
+# ===== Logs & temporary files =====
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.orig
