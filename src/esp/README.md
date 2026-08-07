@@ -17,9 +17,10 @@ only (wiring + control logic).
 ```
 <BoardName>/
 ├── <BoardName>.ino     # glue: instantiate components, setup()/loop(), control logic
-├── Config.h            # board config (MACs, Firebase keys, constants); includes PINS_CONFIG.h + WEATHER_CONFIG.h
+├── Config.h            # board config (MACs, constants); includes PINS_CONFIG.h + WEATHER_CONFIG.h + FIREBASE_CONFIG.h
 ├── PINS_CONFIG.h       # pin assignments - all GPIO wiring for the board
 ├── WEATHER_CONFIG.h    # WeatherAPI credentials (GIT-IGNORED; copy from WEATHER_CONFIG.example.h)
+├── FIREBASE_CONFIG.h   # Firebase credentials (GIT-IGNORED; copy from FIREBASE_CONFIG.example.h) [gateway only]
 ├── TemperatureSensor.{h,cpp}   # component: DS18B20   (wraps OneWire + DallasTemperature)
 ├── HumiditySensor.{h,cpp}      # component: DHT22     (wraps DHT)
 ├── SsrOutput.{h,cpp}           # component: SSR output (wraps Arduino digital I/O)
@@ -85,7 +86,8 @@ Firebase is **two-way** on the gateway (Mobizt `FirebaseClient`, async):
 `setJson()`/`updateJson()` write telemetry/state to `radiant/telemetry/*`,
 and `stream()` listens to `radiant/config` in real time. Enable **Anonymous**
 or **Email/Password** auth in the Firebase console and put the Web API key
-in `FIREBASE_API_KEY` (see `Config.h`).
+in `FIREBASE_CONFIG.h` (`FIREBASE_API_KEY`; copy from
+`FIREBASE_CONFIG.example.h` — it is git-ignored).
 
 ## Working with the sketches
 
@@ -93,11 +95,12 @@ in `FIREBASE_API_KEY` (see `Config.h`).
 2. Install the libraries above.
 3. Open each board folder as a sketch in Arduino IDE, set the right board
    and COM port, and upload.
-4. Fill in the config headers before flashing: `Config.h` (Firebase keys +
-   peer/gateway MACs), `WEATHER_CONFIG.h` (WeatherAPI key - copy from
-   `WEATHER_CONFIG.example.h`; it is git-ignored), and check `PINS_CONFIG.h`
-   (pins). WiFi credentials are entered via the captive portal on first
-   boot - nothing to fill in.
+4. Fill in the config headers before flashing: `Config.h` (peer/gateway
+   MACs), `FIREBASE_CONFIG.h` (Firebase URL + Web API key - copy from
+   `FIREBASE_CONFIG.example.h`; it is git-ignored), `WEATHER_CONFIG.h`
+   (WeatherAPI key - copy from `WEATHER_CONFIG.example.h`; it is
+   git-ignored), and check `PINS_CONFIG.h` (pins). WiFi credentials are
+   entered via the captive portal on first boot - nothing to fill in.
 
 ## References
 

@@ -140,8 +140,10 @@ radiant-cooling/
 
 1. Open each sketch folder in `src/esp/` with Arduino IDE, select the correct
    ESP32 board + COM port, and upload.
-2. Fill in `Config.h` for each board (Firebase + Weather keys on the gateway,
-   peer/gateway MAC addresses everywhere).
+2. Fill in the config headers: on the gateway copy
+   `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` and
+   `WEATHER_CONFIG.example.h` → `WEATHER_CONFIG.h` (both are git-ignored),
+   and set the peer/gateway MAC addresses in `Config.h` for each board.
 3. On first boot the gateway opens a **WiFiManager portal** (AP
    `RadiantCooling-AP`) — connect to it from your phone and enter your
    network credentials.
@@ -165,8 +167,10 @@ are next on the roadmap.
 1. Create a Firebase project and enable **Realtime Database**.
 2. Enable **Anonymous** (or Email/Password) authentication in *Auth → Sign-in
    method*.
-3. Copy the **Web API key** and database URL into the gateway's `Config.h`
-   (`FIREBASE_API_KEY`, `FIREBASE_URL`).
+3. Copy `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` in the gateway
+   folder and paste the database URL, **Web API key**, and (if using
+   email/password auth) credentials — the file is git-ignored so secrets
+   stay local.
 4. Apply security rules that let the gateway write `telemetry`/`state` and
    read `config`, and the app do the reverse (see
    [`docs/api.md`](docs/api.md#8-firebase-security-rules--auth)).

@@ -230,7 +230,8 @@ Sensible defaults for this system:
 
 - The **gateway** authenticates via FirebaseClient — email/password or
   anonymous sign-in (the corresponding provider must be enabled in Firebase
-  console → Auth).
+  console → Auth). Credentials live in the gateway's `FIREBASE_CONFIG.h`
+  (git-ignored - copy from `FIREBASE_CONFIG.example.h`).
 - The **app** authenticates via the Firebase SDK (anonymous or Google sign-in
   for personal use).
 - Rules are versioned alongside the data paths.
