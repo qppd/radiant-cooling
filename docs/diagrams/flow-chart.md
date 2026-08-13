@@ -14,7 +14,7 @@ flowchart TD
     A["Start"] --> B["Init sensors, ESP-NOW peers, Wi-Fi + Firebase"]
     B --> C["Read local 6x DS18B20 sensors"]
     C --> D["Drain ESP-NOW queue (peer telemetry)"]
-    D --> E["Fetch weather (throttled: WEATHER_POLL_S)"]
+    D --> E["Read weather from Firebase config stream"]
     E --> F["Compute pump decision - weather + sensors + dew point"]
     F --> G{"Decision changed?"}
     G -->|Yes| H["Send set_pumps cmd to chiller over ESP-NOW"]
@@ -47,21 +47,21 @@ flowchart TD
 ## 2. Water Pump Control Logic (computed on the gateway)
 
 The pump decision is **not** made on the chiller board — the gateway
-(`RadiantCoolingMonitor`) computes it from the WeatherAPI dew point and all
-ESP sensor readings, then sends a `set_pumps` command to the chiller. The
-chiller board only executes commands (with a local fail-safe: pumps off if
-its water sensor is lost).
+(`RadiantCoolingMonitor`) computes it from the outdoor weather streamed by
+the Flutter app and all ESP sensor readings, then sends a `set_pumps`
+command to the chiller. The chiller board only executes commands (with a
+local fail-safe: pumps off if its water sensor is lost).
 
 ```mermaid
 flowchart TD
-    A["Inputs: outdoor dew point + temp (WeatherAPI), DHT22 temp + humidity, water temp, hottest room temp"]
-    A --> B["Indoor dew point = Magnus(room temp, humidity)"]
+    A["Inputs: outdoor dew point + temp (app → Firebase), DHT22 temp + humidity, supply/return + pipe temps (DS18B20), chiller tank temp"]
+    A --> B["Indoor dew point = Magnus(DHT22 temp, humidity)"]
     B --> C["Ref dew point = max(outdoor, indoor)"]
     C --> D["Water floor = ref dew point + margin"]
     D --> E{"Weather demand?<br/>(outdoor temp &gt; weather_cool_temp)"}
-    E -->|Yes| F{"Sensor demand?<br/>(hottest room &gt; comfort setpoint)"}
+    E -->|Yes| F{"Sensor demand?<br/>(indoor DHT22 temp &gt; comfort setpoint)"}
     E -->|No| G["Pumps OFF"]
-    F -->|Yes| H{"Water temp safely above floor?"}
+    F -->|Yes| H{"Coldest pipe/tank above floor?"}
     F -->|No| G
     H -->|Yes| I["Pumps ON"]
     H -->|No| G

@@ -29,7 +29,7 @@ flowchart LR
     end
 
     subgraph SEN["Sensors"]
-        T6["6x DS18B20<br/>(1-Wire)"]
+        T6["6x DS18B20<br/>(supply/return + pipes)"]
         T1["1x DS18B20<br/>(water temp)"]
         DHT["1x DHT22<br/>(temp + humidity)"]
     end
@@ -70,7 +70,7 @@ flowchart LR
     DHC -->|"SSR"| DHU
 
     GW <-->|"Wi-Fi / HTTPS"| FB
-    GW <-->|"HTTPS"| WX
+    UI <-->|"HTTPS"| WX
     FB <-->|"Firebase SDK"| UI
 ```
 
@@ -89,7 +89,7 @@ flowchart LR
 | `RadiantCoolingMonitor`  | **Gateway**         | Wi-Fi + Firebase + ESP-NOW; reads 6x DS18B20         |
 | `WaterChillerController` | ESP-NOW peer        | Reads 1x DS18B20; controls 2 water pumps via 2 SSRs  |
 | `DehumidifierController` | ESP-NOW peer        | Reads 1x DHT22; controls dehumidifier via 1 SSR      |
-| 6x DS18B20               | Sensor              | Water supply/return + room temperatures (monitor)    |
+| 6x DS18B20               | Sensor              | Water supply/return + 4 pipe temps above the ceiling (monitor) |
 | 1x DS18B20               | Sensor              | Chiller loop water temperature                       |
 | 1x DHT22                 | Sensor              | Temperature + humidity for dew-point control         |
 | WiFi reset button        | Control             | GPIO 33 → GND; hold 3 s to erase WiFi credentials    |
@@ -97,7 +97,7 @@ flowchart LR
 | Dehumidifier             | Actuator            | Removes humidity (SSR-controlled)                    |
 | Power supplies (3)       | Power               | One 220V→5V/3A supply per board (isolated)           |
 | Firebase RTDB            | Cloud               | Shared database for app and firmware                 |
-| WeatherAPI.com           | Cloud               | Outdoor dew point + temperature for pump control     |
+| WeatherAPI.com           | Cloud (app)         | Outdoor dew point + temperature; key in the app, data via Firebase |
 | `RadiantCooling` app     | App                 | Monitoring and configuration UI (Android)            |
 
 ## Notes

@@ -37,10 +37,11 @@
 A complete control and monitoring system for a **radiant cooling**
 installation. Three ESP32 boards form a wireless mesh:
 
-- **RadiantCoolingMonitor** (gateway) reads **6× DS18B20** temperature
-  sensors, collects data from the other boards, fetches outdoor weather, and
-  pushes everything to Firebase — while also computing the chiller pump
-  control (weather-driven + condensation protection).
+- **RadiantCoolingMonitor** (gateway) reads **6× DS18B20** water/pipe
+  temperatures, collects data from the other boards, receives outdoor
+  weather from the Flutter app, and pushes everything to Firebase — while
+  also computing the chiller pump control (weather-driven + condensation
+  protection).
 - **WaterChillerController** switches **2 water pumps (SSR)** on command from
   the gateway.
 - **DehumidifierController** holds indoor humidity at **55% RH** with its
@@ -55,8 +56,8 @@ and the gateway is the only device with Wi-Fi.
 - **Two-way Firebase** — realtime *streaming* of config changes from the app,
   plus telemetry/state writes (Mobizt `FirebaseClient`, async, non-blocking)
 - **Weather-aware pump control** — combines WeatherAPI.com dew point,
-  indoor humidity, water temperature and room temperatures; anti-condensation
-  water-floor protection
+  indoor humidity, water/pipe temperatures and indoor air (DHT22);
+  anti-condensation protection on the coldest pipe
 - **Dehumidifier** — holds indoor RH at 55% with hysteresis
 - **WiFiManager provisioning** — captive portal on first boot; hold the
   reset button 3 s to re-provision
@@ -71,7 +72,7 @@ and the gateway is the only device with Wi-Fi.
 │WaterChiller    │◄───────────►│RadiantCoolingMonitor     │
 │Controller      │             │(gateway: WiFiManager +   │
 └────────────────┘             │ Firebase stream +        │
-┌────────────────┐   ESP-NOW   │ WeatherAPI + ESP-NOW)    │
+┌────────────────┐   ESP-NOW   │ Firebase + ESP-NOW)      │
 │Dehumidifier    │◄───────────►│                          │
 │Controller      │             └────────────┬─────────────┘
 └────────────────┘                          │ HTTPS
@@ -134,16 +135,17 @@ radiant-cooling/
   `ArduinoJson`, `FirebaseClient` (Mobizt), `WiFiManager` (tzapu)
 - [Flutter SDK](https://flutter.dev) (for the app)
 - A [Firebase](https://firebase.google.com) project with Realtime Database
-- A free [WeatherAPI.com](https://www.weatherapi.com) API key
+- A free [WeatherAPI.com](https://www.weatherapi.com) API key (used by the
+  Flutter app — the firmware never stores it)
 
 ### Firmware
 
 1. Open each sketch folder in `src/esp/` with Arduino IDE, select the correct
    ESP32 board + COM port, and upload.
 2. Fill in the config headers: on the gateway copy
-   `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` and
-   `WEATHER_CONFIG.example.h` → `WEATHER_CONFIG.h` (both are git-ignored),
-   and set the peer/gateway MAC addresses in `Config.h` for each board.
+   `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` (git-ignored), and
+   set the peer/gateway MAC addresses and the `SYSTEM_ID` in `Config.h`
+   for each board. The WeatherAPI key lives in the Flutter app only.
 3. On first boot the gateway opens a **WiFiManager portal** (AP
    `RadiantCooling-AP`) — connect to it from your phone and enter your
    network credentials.
@@ -159,8 +161,23 @@ flutter pub get
 flutter run
 ```
 
-The app scaffold is in place; Firebase SDK integration and the dashboard UI
-are next on the roadmap.
+Setup before first run:
+
+1. Use the same Firebase project as the gateway; add the Android app
+   (package `com.radiantcooling.radiant_cooling`), download
+   `google-services.json` into `android/app/`, and wire the
+   `google-services` Gradle plugin — see
+   [`references/flutter-android-firebase.md`](references/flutter-android-firebase.md).
+2. Copy `lib/config/app_config.example.dart` → `lib/config/app_config.dart`
+   and fill in the **WeatherAPI.com key** (git-ignored — the firmware never
+   stores it). The app polls WeatherAPI.com and writes the outdoor
+   conditions to `radiant/config/weather`, which the gateway streams.
+3. On first launch, **link** the app to your system by entering the
+   `SYSTEM_ID` from the gateway's `Config.h` (the gateway publishes it in
+   `radiant/devices/<SYSTEM_ID>`).
+
+The app currently provides **system linking** and **outdoor weather
+publishing**; the dashboard and control screens are next on the roadmap.
 
 ## Firebase Setup
 
@@ -200,7 +217,7 @@ are next on the roadmap.
 | Firmware        | ESP32 (WROOM-32), C/C++, Arduino IDE              |
 | Mesh            | ESP-NOW (built into the ESP32 core)               |
 | Cloud           | Firebase Realtime Database + FirebaseClient       |
-| Weather         | WeatherAPI.com                                    |
+| Weather         | WeatherAPI.com (key in the Flutter app)           |
 | WiFi provisioning | WiFiManager (captive portal)                    |
 | App             | Flutter (Android)                                 |
 

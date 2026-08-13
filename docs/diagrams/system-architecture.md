@@ -49,7 +49,7 @@ flowchart TB
 
     UI <-->|"Firebase SDK (HTTPS)"| FB
     FB <-->|"Firebase REST (HTTPS)"| GW
-    GW <-->|"HTTPS"| WX
+    UI <-->|"HTTPS"| WX
 
     GW <-->|"ESP-NOW"| WCC
     GW <-->|"ESP-NOW"| DHC
@@ -71,9 +71,11 @@ flowchart TB
   DS18B20; chiller: 1x DS18B20; dehumidifier: 1x DHT22). Peers send their
   readings to the gateway over ESP-NOW; the gateway combines everything and
   writes to Firebase; the app reads via the Firebase SDK.
-- **Weather → control:** the gateway polls WeatherAPI.com for the outdoor
-  dew point/temperature and computes the chiller pump decision (weather +
-  sensors + condensation protection, see `docs/diagrams/flow-chart.md`).
+- **Weather → control:** the Flutter app polls WeatherAPI.com (key stored
+  app-side) and writes the outdoor dew point/temperature to
+  `radiant/config/weather`; the gateway streams it and computes the chiller
+  pump decision (weather + sensors + condensation protection, see
+  `docs/diagrams/flow-chart.md`).
 - **App → plant:** the app writes `config`/`cmd` in Firebase; the gateway
   detects the change and relays it to the right peer over ESP-NOW.
 

@@ -8,7 +8,7 @@ only (wiring + control logic).
 
 | Folder                     | Hardware                                                     | Role     |
 | -------------------------- | ------------------------------------------------------------ | -------- |
-| `RadiantCoolingMonitor/`   | 6x DS18B20 (1-Wire)                                          | Gateway  |
+| `RadiantCoolingMonitor/`   | 6x DS18B20 (1-Wire): supply/return + 4 pipe temps              | Gateway  |
 | `WaterChillerController/`  | 1x DS18B20, 2x SSR -> 2 water pumps                          | Peer     |
 | `DehumidifierController/`  | 1x DHT22, 1x SSR -> dehumidifier                             | Peer     |
 
@@ -17,9 +17,8 @@ only (wiring + control logic).
 ```
 <BoardName>/
 ├── <BoardName>.ino     # glue: instantiate components, setup()/loop(), control logic
-├── Config.h            # board config (MACs, constants); includes PINS_CONFIG.h + WEATHER_CONFIG.h + FIREBASE_CONFIG.h
+├── Config.h            # board config (MACs, SYSTEM_ID, constants); includes PINS_CONFIG.h + FIREBASE_CONFIG.h
 ├── PINS_CONFIG.h       # pin assignments - all GPIO wiring for the board
-├── WEATHER_CONFIG.h    # WeatherAPI credentials (GIT-IGNORED; copy from WEATHER_CONFIG.example.h)
 ├── FIREBASE_CONFIG.h   # Firebase credentials (GIT-IGNORED; copy from FIREBASE_CONFIG.example.h) [gateway only]
 ├── TemperatureSensor.{h,cpp}   # component: DS18B20   (wraps OneWire + DallasTemperature)
 ├── HumiditySensor.{h,cpp}      # component: DHT22     (wraps DHT)
@@ -28,7 +27,6 @@ only (wiring + control logic).
 ├── EspNowTransport.{h,cpp}     # comms:    ESP-NOW    (wraps WiFi + esp_now)
 ├── JsonProtocol.{h,cpp}        # protocol: JSON envelope (wraps ArduinoJson)
 ├── FirebaseSync.{h,cpp}        # cloud:    Firebase RTDB set/update + realtime stream (wraps FirebaseClient) [gateway only]
-├── WeatherApi.{h,cpp}          # cloud:    WeatherAPI.com current weather (wraps HTTPClient) [gateway only]
 └── ClimateControl.{h,cpp}      # control:  dew point + pump decision [gateway only]
 ```
 
@@ -51,7 +49,6 @@ Each board only includes the modules it needs:
 | `EspNowTransport`    | Yes               | Yes      | Yes          |
 | `JsonProtocol`       | Yes               | Yes      | Yes          |
 | `FirebaseSync`       | Yes               | —        | —            |
-| `WeatherApi`         | Yes               | —        | —            |
 | `ClimateControl`     | Yes               | —        | —            |
 
 ## Why modules are duplicated across folders
@@ -73,9 +70,11 @@ if the duplication becomes a burden.
 | `FirebaseClient`    | monitor         | Mobizt; the old `Firebase-ESP-Client` is deprecated |
 | `WiFiManager`       | monitor         | tzapu - captive-portal WiFi provisioning            |
 
-ESP-NOW (`esp_now.h`), WiFi, and `HTTPClient` (used by `WeatherApi`) are
-built into the Arduino ESP32 core. A **WeatherAPI.com API key** is required
-in the gateway's `Config.h` (`WEATHER_API_KEY`).
+ESP-NOW (`esp_now.h`) and WiFi are built into the Arduino ESP32 core.
+Outdoor weather is **not** fetched by the firmware: the Flutter app calls
+WeatherAPI.com (key stored app-side) and writes `radiant/config/weather`
+to Firebase; the gateway streams it (see `docs/api.md §4`). Weather older
+than `WEATHER_STALE_S` (default 1 h) is ignored.
 
 WiFi credentials are **not** stored in code — they are entered once through
 the WiFiManager captive portal (AP `RadiantCooling-AP`). Hold the gateway's
@@ -98,11 +97,13 @@ email/password (not anonymous) when those rules are used.
 - **ESP-NOW receive** on every board is decoupled through a FreeRTOS queue:
   the callback only enqueues raw bytes; `loop()` drains, decodes
   (`JsonProtocol`), and applies/handles the message.
-- **Gateway** caches the latest peer readings for the chiller computation,
-  forwards peer `telemetry`/`state` to Firebase, publishes its own
-  telemetry + a retained heartbeat (`radiant/heartbeat/monitor`, includes
-  the Wi-Fi channel), sends `set_pumps` on decision changes, and applies or
-  forwards `radiant/config` stream changes.
+- **Gateway** reads supply/return + pipe temperatures (6x DS18B20), caches
+  the latest peer readings for the chiller computation, forwards peer
+  `telemetry`/`state` to Firebase, publishes its own telemetry + a retained
+  heartbeat (`radiant/heartbeat/monitor`, includes the Wi-Fi channel), sends
+  `set_pumps` on decision changes, and applies or forwards `radiant/config`
+  stream changes. Cooling demand comes from the dehumidifier's DHT22 indoor
+  temperature; the anti-condensation floor protects the coldest pipe/tank.
 - **Chiller** executes `set_pumps` (`on`/`off`), reports a `state` message
   on pump changes, and streams `water_temp_c` telemetry every
   `TELEMETRY_S`.
@@ -131,11 +132,11 @@ cd src/esp/tests
 3. Open each board folder as a sketch in Arduino IDE, set the right board
    and COM port, and upload.
 4. Fill in the config headers before flashing: `Config.h` (peer/gateway
-   MACs), `FIREBASE_CONFIG.h` (Firebase URL + Web API key - copy from
-   `FIREBASE_CONFIG.example.h`; it is git-ignored), `WEATHER_CONFIG.h`
-   (WeatherAPI key - copy from `WEATHER_CONFIG.example.h`; it is
-   git-ignored), and check `PINS_CONFIG.h` (pins). WiFi credentials are
-   entered via the captive portal on first boot - nothing to fill in.
+   MACs, `SYSTEM_ID`), `FIREBASE_CONFIG.h` (Firebase URL + Web API key -
+   copy from `FIREBASE_CONFIG.example.h`; it is git-ignored), and check
+   `PINS_CONFIG.h` (pins). WiFi credentials are entered via the captive
+   portal on first boot - nothing to fill in. The WeatherAPI key lives in
+   the Flutter app, not on the board.
 
 ## References
 

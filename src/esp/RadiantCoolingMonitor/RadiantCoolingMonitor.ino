@@ -2,9 +2,10 @@
  * RadiantCoolingMonitor.ino
  *
  * ESP32 GATEWAY - reads 6x DS18B20 temperature sensors, receives ESP-NOW
- * packets from the chiller and dehumidifier boards, fetches weather data,
- * and syncs all sensor data to Firebase Realtime Database. Also computes
- * the water chiller pump control (weather + sensors + condensation).
+ * packets from the chiller and dehumidifier boards, receives outdoor
+ * weather from the Flutter app via Firebase, and syncs all sensor data to
+ * Firebase Realtime Database. Also computes the water chiller pump control
+ * (weather + sensors + condensation).
  *
  * Firebase is two-way (Mobizt FirebaseClient, async):
  *   - SAVE:    telemetry/state written to radiant/telemetry/* via setJson()
@@ -22,7 +23,6 @@
  *   EspNowTransport     - wraps WiFi + esp_now (register peers, send/receive)
  *   JsonProtocol        - wraps ArduinoJson (ESP-NOW message envelope)
  *   FirebaseSync        - wraps FirebaseClient (set/update + realtime stream)
- *   WeatherApi          - wraps HTTPClient (WeatherAPI.com current weather)
  *   ClimateControl      - dew point + pump decision (control computation)
  *
  * See docs/ for architecture, API and control logic.
@@ -34,7 +34,6 @@
 #include "EspNowTransport.h"
 #include "JsonProtocol.h"
 #include "FirebaseSync.h"
-#include "WeatherApi.h"
 #include "ClimateControl.h"
 
 #include <freertos/FreeRTOS.h>
@@ -46,15 +45,14 @@ TemperatureSensor loopTemps(PIN_ONE_WIRE, TEMP_COUNT);
 WifiProvisioner wifi(WIFI_AP_NAME, PIN_WIFI_RESET_BUTTON);
 EspNowTransport espNow;
 FirebaseSync cloud;
-WeatherApi weather(WEATHER_API_KEY, WEATHER_LOCATION);
 
 // ---- Telemetry state ----
 unsigned long lastPublishMs = 0;
-unsigned long lastWeatherMs = 0;
+unsigned long lastWeatherUpdateMs = 0;  // when outdoor weather last arrived from the app
 uint32_t seq = 0;
 
 // ---- Control state ----
-WeatherConditions wx;        // latest weather fetch
+bool weatherValid = false;   // outdoor weather received from the app (config/weather stream)
 ControlInputs inputs;        // latest values from all sources
 ControlParams  params;       // defaults; updated from the config stream
 bool pumpsOn = false;
@@ -159,6 +157,15 @@ void onConfigStream(const char* path, const String& json) {
                   params.comfortSetpointC, params.dewPointMarginC,
                   params.weatherCoolTempC);
   }
+  // /radiant/config/weather (written by the Flutter app) -> outdoor conditions
+  else if (strncmp(path, "/radiant/config/weather", 23) == 0) {
+    inputs.outdoorTempC     = doc["temp_c"]     | -100.0f;
+    inputs.outdoorDewPointC = doc["dewpoint_c"] | -100.0f;
+    weatherValid = true;
+    lastWeatherUpdateMs = millis();
+    Serial.printf("[config] weather: temp=%.1f dewpoint=%.1f\n",
+                  inputs.outdoorTempC, inputs.outdoorDewPointC);
+  }
   // /radiant/config/dh (+ children) -> forward dehumidifier config over ESP-NOW
   else if (strncmp(path, "/radiant/config/dh", 18) == 0) {
     JsonDocument payload;
@@ -217,13 +224,14 @@ void loop() {
   loopTemps.requestTemperatures();
   delay(750);                                  // DS18B20 conversion time
 
-  // Sensor inputs: hottest room temp from the local DS18B20 array.
-  // (TODO: only use the room-sensor subset once placements are known.)
-  inputs.hottestRoomC = -100.0f;
-  for (uint8_t i = 0; i < loopTemps.count(); i++) {
-    float t = loopTemps.readC(i);
-    if (t > inputs.hottestRoomC) inputs.hottestRoomC = t;
-  }
+  // Sensor inputs: chilled-water supply/return + pipe temperatures from the
+  // local DS18B20 array (index roles in Config.h). Coldest pipe = min of the
+  // VALID readings - the true anti-condensation surface above the ceiling.
+  float pipeTemps[TEMP_COUNT];
+  for (uint8_t i = 0; i < loopTemps.count(); i++) pipeTemps[i] = loopTemps.readC(i);
+  inputs.supplyTempC  = pipeTemps[IDX_SUPPLY];
+  inputs.returnTempC  = pipeTemps[IDX_RETURN];
+  inputs.coldestPipeC = ClimateControl::coldestValidC(pipeTemps, loopTemps.count());
 
   // Drain the ESP-NOW RX queue: peer telemetry/state/status
   EspNowRxPacket pkt;
@@ -234,12 +242,14 @@ void loop() {
     }
   }
 
-  // Weather refresh (throttled - see WEATHER_POLL_S)
-  if (millis() - lastWeatherMs >= WEATHER_POLL_S * 1000UL) {
-    lastWeatherMs = millis();
-    wx = weather.fetch();
-    inputs.outdoorTempC     = wx.tempC;
-    inputs.outdoorDewPointC = wx.dewPointC;
+  // Outdoor weather arrives from the Flutter app via the config/weather
+  // stream. When it goes stale (app offline), drop it: weather demand turns
+  // off and the condensation floor falls back to the indoor dew point.
+  if (weatherValid && millis() - lastWeatherUpdateMs >= WEATHER_STALE_S * 1000UL) {
+    weatherValid = false;
+    inputs.outdoorTempC     = -100.0f;
+    inputs.outdoorDewPointC = -100.0f;
+    Serial.println("[weather] stale (app offline) - indoor dew point only");
   }
 
   // Control computation (weather + sensors + condensation, see flow-chart.md)
@@ -253,27 +263,45 @@ void loop() {
   if (millis() - lastPublishMs >= TELEMETRY_S * 1000UL) {
     lastPublishMs = millis();
 
-    // radiant/telemetry/monitor/latest
+    // radiant/telemetry/monitor/latest (temps_c = [supply, return, pipe1..4])
     JsonDocument tel;
     JsonArray temps = tel["temps_c"].to<JsonArray>();
     for (uint8_t i = 0; i < loopTemps.count(); i++) temps.add(loopTemps.readC(i));
-    tel["dew_point_c"]   = d.refDewPointC;
-    tel["water_floor_c"] = d.waterFloorC;
-    tel["pumps"]         = pumpsOn ? "on" : "off";
-    tel["ts"]            = nowUnix();
+    tel["supply_c"]       = inputs.supplyTempC;
+    tel["return_c"]       = inputs.returnTempC;
+    tel["coldest_pipe_c"] = inputs.coldestPipeC;
+    tel["delta_t_c"] = (inputs.returnTempC > kTempValidLoC && inputs.returnTempC < kTempValidHiC &&
+                        inputs.supplyTempC > kTempValidLoC && inputs.supplyTempC < kTempValidHiC)
+                            ? inputs.returnTempC - inputs.supplyTempC : 0.0f;
+    tel["dew_point_c"]    = d.refDewPointC;
+    tel["water_floor_c"]  = d.waterFloorC;
+    tel["pumps"]          = pumpsOn ? "on" : "off";
+    tel["ts"]             = nowUnix();
     char json[512];
     serializeJson(tel, json, sizeof(json));
     cloud.setJson("/radiant/telemetry/monitor/latest", json);
 
-    // Retained heartbeat (also exposes the Wi-Fi channel for peer sync)
+    // Retained heartbeat (exposes SYSTEM_ID for app linking + Wi-Fi channel)
     JsonDocument hb;
-    hb["online"]   = true;
-    hb["firmware"] = "0.1.0";
-    hb["channel"]  = WiFi.channel();
-    hb["ts"]       = nowUnix();
+    hb["online"]    = true;
+    hb["firmware"]  = "0.1.0";
+    hb["channel"]   = WiFi.channel();
+    hb["device_id"] = SYSTEM_ID;
+    hb["ts"]        = nowUnix();
     char hbJson[256];
     serializeJson(hb, hbJson, sizeof(hbJson));
     cloud.setJson("/radiant/heartbeat/monitor", hbJson);
+
+    // Device registry - the app discovers/links this system via SYSTEM_ID.
+    JsonDocument dev;
+    dev["online"]    = true;
+    dev["firmware"]  = "0.1.0";
+    dev["channel"]   = WiFi.channel();
+    dev["device_id"] = SYSTEM_ID;
+    dev["ts"]        = nowUnix();
+    char devJson[256];
+    serializeJson(dev, devJson, sizeof(devJson));
+    cloud.setJson(String("/radiant/devices/") + SYSTEM_ID, devJson);
   }
 
   delay(100);

@@ -5,9 +5,10 @@
  * the two water pumps (SSR) on COMMAND from the gateway.
  *
  * The pump on/off decision is computed on the gateway (RadiantCoolingMonitor)
- * from the WeatherAPI dew point + all sensor readings (see
- * docs/diagrams/flow-chart.md). This board executes commands and reports
- * water temperature back; it only overrides for local fail-safety.
+ * from the outdoor dew point (fetched by the Flutter app) + all sensor
+ * readings (see docs/diagrams/flow-chart.md). This board executes commands
+ * and reports water temperature back; it only overrides for local
+ * fail-safety.
  *
  * This file is glue only. All component/library code is encapsulated:
  *   Config.h            - board configuration (MACs, constants); includes PINS_CONFIG.h

@@ -23,6 +23,10 @@
           ".write": "auth != null",
           ".validate": "(!newData.hasChildren(['comfort_setpoint_c']) || newData.child('comfort_setpoint_c').isNumber()) && (!newData.hasChildren(['dewpoint_margin_c']) || newData.child('dewpoint_margin_c').isNumber()) && (!newData.hasChildren(['weather_cool_temp_c']) || newData.child('weather_cool_temp_c').isNumber())"
         },
+        "weather": {
+          ".write": "auth != null",
+          ".validate": "(!newData.hasChildren(['temp_c']) || newData.child('temp_c').isNumber()) && (!newData.hasChildren(['dewpoint_c']) || newData.child('dewpoint_c').isNumber()) && (!newData.hasChildren(['humidity_pct']) || newData.child('humidity_pct').isNumber()) && (!newData.hasChildren(['ts']) || newData.child('ts').isNumber())"
+        },
         "dh": {
           ".write": "auth != null",
           ".validate": "(!newData.hasChildren(['humidity_setpoint_pct']) || (newData.child('humidity_setpoint_pct').isNumber() && newData.child('humidity_setpoint_pct').val() >= 20 && newData.child('humidity_setpoint_pct').val() <= 90)) && (!newData.hasChildren(['humidity_deadband_pct']) || (newData.child('humidity_deadband_pct').isNumber() && newData.child('humidity_deadband_pct').val() >= 0 && newData.child('humidity_deadband_pct').val() <= 20))"
@@ -30,6 +34,12 @@
       },
       "heartbeat": {
         "$node": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'"
+        }
+      },
+      "devices": {
+        "$device": {
           ".read": "auth != null",
           ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'"
         }

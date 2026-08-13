@@ -5,8 +5,9 @@
  * Arduino.h in this folder) and verifies:
  *   - Magnus-formula dew point        (ClimateControl::dewPointC)
  *   - pump decision logic             (ClimateControl::decidePumps):
- *       weather demand, sensor demand, condensation protection,
- *       switching hysteresis, and the reference dew point selection
+ *       weather demand, sensor demand (indoor DHT22), condensation
+ *       protection on the COLDEST pipe/tank surface, switching hysteresis,
+ *       reference dew point selection, and the no-water-temp fail-safe
  *
  * No test framework is required - plain asserts with a tiny harness.
  *
@@ -44,7 +45,7 @@ static int g_failures = 0;
 // the ControlParams struct).
 static ControlParams defaultParams() {
   ControlParams p;
-  p.comfortSetpointC = 24.0f;   // rooms above this -> cooling demand
+  p.comfortSetpointC = 24.0f;   // indoor air (DHT22) above this -> cooling demand
   p.dewPointMarginC  = 2.0f;    // water floor = dew point + margin
   p.weatherCoolTempC = 28.0f;   // outdoor above this -> weather demand
   p.hysteresisC      = 1.0f;
@@ -78,18 +79,39 @@ static void testDewPointGuards() {
 }
 
 // ---------------------------------------------------------------------------
+// coldestValidC - min-of-valid aggregation (used by the gateway loop)
+// ---------------------------------------------------------------------------
+static void testColdestValidC() {
+  // No valid readings -> invalid sentinel (-100).
+  float allInvalid[4] = { -127.0f, 85.0f, -100.0f, NAN };
+  CHECK(ClimateControl::coldestValidC(allInvalid, 4) == -100.0f);
+
+  // Mixed valid/invalid -> min of the valid ones only.
+  float mixed[4] = { 25.0f, 85.0f, 18.5f, -127.0f };
+  CHECK_CLOSE(ClimateControl::coldestValidC(mixed, 4), 18.5f, 0.001f);
+
+  // NaN and glitch values are skipped.
+  float withGarbage[3] = { NAN, 22.0f, 19.0f };
+  CHECK_CLOSE(ClimateControl::coldestValidC(withGarbage, 3), 19.0f, 0.001f);
+}
+
+// ---------------------------------------------------------------------------
 // decidePumps - decision logic
 // ---------------------------------------------------------------------------
 
 // Helper: inputs that satisfy BOTH demands with a safe water temperature.
+// The condensation check uses min(coldestPipeC, waterTempC); here that is
+// min(24, 25) = 24 > floor 22 + hysteresis 1.
 static ControlInputs warmAndComfortableInputs() {
   ControlInputs in;
   in.outdoorTempC      = 32.0f;   // > 28 -> weather demand
   in.outdoorDewPointC  = 20.0f;   // floor = 22
-  in.indoorTempC       = 24.0f;   // indoor dew point ~14.4 (< outdoor)
+  in.indoorTempC       = 26.0f;   // > 24 -> sensor demand; indoor dew point ~16.3
   in.indoorHumidityPct = 55.0f;
-  in.waterTempC        = 25.0f;   // > 22 + 1 hysteresis
-  in.hottestRoomC      = 26.0f;   // > 24 -> sensor demand
+  in.supplyTempC       = 24.0f;   // index 0 (monitor DS18B20)
+  in.returnTempC       = 25.0f;   // index 1 (monitor DS18B20)
+  in.coldestPipeC      = 24.0f;   // min of the monitor pipe readings
+  in.waterTempC        = 25.0f;   // chiller tank
   return in;
 }
 
@@ -99,9 +121,9 @@ static void testDecidePumpsOffToOn() {
 
   CHECK(d.weatherDemand == true);
   CHECK(d.sensorDemand == true);
-  CHECK_CLOSE(d.refDewPointC, 20.0f, 0.1f);   // max(outdoor 20, indoor ~14.4)
+  CHECK_CLOSE(d.refDewPointC, 20.0f, 0.1f);   // max(outdoor 20, indoor ~16.3)
   CHECK_CLOSE(d.waterFloorC, 22.0f, 0.1f);    // 20 + margin 2
-  CHECK(d.pumpsOn == true);                   // water 25 > floor 22 + hyst 1
+  CHECK(d.pumpsOn == true);                   // coldest 24 > floor 22 + hyst 1
 }
 
 static void testDecidePumpsNoWeatherDemand() {
@@ -116,8 +138,9 @@ static void testDecidePumpsNoWeatherDemand() {
 }
 
 static void testDecidePumpsNoSensorDemand() {
+  // No room-air sensor exists on the monitor; demand comes from the DHT22.
   ControlInputs in = warmAndComfortableInputs();
-  in.hottestRoomC = 22.0f;                    // <= 24 -> no sensor demand
+  in.indoorTempC = 22.0f;                     // <= 24 -> no sensor demand
   ControlDecision d =
       ClimateControl::decidePumps(in, defaultParams(), false);
 
@@ -127,27 +150,44 @@ static void testDecidePumpsNoSensorDemand() {
 }
 
 static void testCondensationOverride() {
-  // Pump is ON but the water temperature has dropped below the floor
+  // Pump is ON but the coldest surface has dropped below the floor
   // (dew point + margin) -> must turn OFF to avoid condensation.
   ControlInputs in = warmAndComfortableInputs();
   in.outdoorDewPointC = 22.0f;                // floor = 24
-  in.waterTempC       = 23.0f;                // below the floor
+  in.coldestPipeC     = 21.0f;                // pipe colder than the floor
+  in.waterTempC       = 25.0f;                // tank still above it
   ControlDecision d =
       ClimateControl::decidePumps(in, defaultParams(), true);
 
   CHECK(d.weatherDemand == true);
   CHECK(d.sensorDemand == true);
   CHECK_CLOSE(d.waterFloorC, 24.0f, 0.1f);
-  CHECK(d.pumpsOn == false);                  // condensation override wins
+  CHECK(d.pumpsOn == false);                  // coldest below floor -> override wins
+}
+
+static void testColdestSurfaceWins() {
+  // The floor must protect the COLDEST measured surface, not just the tank:
+  // pipe at 23 with a 24 C floor stops the pumps even though the tank (25)
+  // is above the floor.
+  ControlInputs in = warmAndComfortableInputs();
+  in.outdoorDewPointC = 22.0f;                // floor = 24
+  in.coldestPipeC     = 23.0f;
+  in.waterTempC       = 25.0f;
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), true);
+
+  CHECK_CLOSE(d.waterFloorC, 24.0f, 0.1f);
+  CHECK(d.pumpsOn == false);                  // min(23, 25) = 23 < 24
 }
 
 static void testSwitchingHysteresis() {
   // floor = 22, hysteresis = 1:
-  //   off -> on requires water > 23
-  //   on  -> off requires water <= 22
-  // water = 22.5 sits in the hysteresis band.
+  //   off -> on requires coldest > 23
+  //   on  -> off requires coldest <= 22
+  // coldest = 22.5 sits in the hysteresis band.
   ControlInputs in = warmAndComfortableInputs();
-  in.waterTempC = 22.5f;
+  in.coldestPipeC = 22.5f;                    // min(22.5, 25) = 22.5
+  in.waterTempC   = 25.0f;
 
   ControlDecision off = ClimateControl::decidePumps(in, defaultParams(), false);
   CHECK(off.pumpsOn == false);                // 22.5 not > 23
@@ -158,17 +198,16 @@ static void testSwitchingHysteresis() {
 
 static void testIndoorDewPointReference() {
   // Indoor dew point (higher) is used as the reference when it exceeds the
-  // outdoor dew point.
+  // outdoor dew point. Magnus(26, 55) ~ 16.3.
   ControlInputs in = warmAndComfortableInputs();
   in.outdoorDewPointC = 10.0f;                // outdoor dew point 10
-  in.indoorTempC      = 24.0f;                // indoor dew point ~14.4
-  in.indoorHumidityPct = 55.0f;
-  in.waterTempC       = 18.0f;                // > floor 16.4 + hyst 1
+  in.coldestPipeC     = 21.0f;                // > floor 18.3 + hyst 1
+  in.waterTempC       = 25.0f;
   ControlDecision d =
       ClimateControl::decidePumps(in, defaultParams(), false);
 
-  CHECK_CLOSE(d.refDewPointC, 14.4f, 0.2f);   // max(10, ~14.4) = indoor
-  CHECK_CLOSE(d.waterFloorC, 16.4f, 0.2f);    // 14.4 + margin 2
+  CHECK_CLOSE(d.refDewPointC, 16.3f, 0.2f);   // max(10, ~16.3) = indoor
+  CHECK_CLOSE(d.waterFloorC, 18.3f, 0.2f);    // 16.3 + margin 2
   CHECK(d.pumpsOn == true);
 }
 
@@ -183,17 +222,58 @@ static void testNoIndoorDewPointFallback() {
   CHECK_CLOSE(d.refDewPointC, 20.0f, 0.1f);   // falls back to outdoor
 }
 
+static void testNoWaterTempFailSafe() {
+  // Neither the pipes nor the tank report a valid temperature - the
+  // condensation floor cannot be verified -> fail safe (pumps off).
+  ControlInputs in = warmAndComfortableInputs();
+  in.coldestPipeC = -100.0f;                  // all monitor readings invalid
+  in.waterTempC   = -127.0f;                  // tank sensor disconnected
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.weatherDemand == true);
+  CHECK(d.sensorDemand == true);
+  CHECK(d.pumpsOn == false);                  // fail-safe
+}
+
+static void testTankOnlyFloorCheck() {
+  // Pipe readings invalid, tank valid: the tank alone drives the floor check.
+  ControlInputs in = warmAndComfortableInputs();
+  in.coldestPipeC = -100.0f;
+  in.waterTempC   = 25.0f;                    // > floor 22 + hyst 1
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.pumpsOn == true);
+}
+
+static void testPipesOnlyFloorCheck() {
+  // Chiller offline (tank invalid): valid pipe readings alone keep the
+  // floor check working - the pipes are the true condensation surface.
+  ControlInputs in = warmAndComfortableInputs();
+  in.waterTempC = -127.0f;                    // tank sensor disconnected
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.pumpsOn == true);                   // coldest pipe 24 > floor 22 + hyst 1
+}
+
 // ---------------------------------------------------------------------------
 int main() {
   testDewPointKnownValues();
   testDewPointGuards();
+  testColdestValidC();
   testDecidePumpsOffToOn();
   testDecidePumpsNoWeatherDemand();
   testDecidePumpsNoSensorDemand();
   testCondensationOverride();
+  testColdestSurfaceWins();
   testSwitchingHysteresis();
   testIndoorDewPointReference();
   testNoIndoorDewPointFallback();
+  testNoWaterTempFailSafe();
+  testTankOnlyFloorCheck();
+  testPipesOnlyFloorCheck();
 
   printf("\n%d check(s), %d failure(s)\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;

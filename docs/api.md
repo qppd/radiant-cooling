@@ -49,6 +49,11 @@
 | `chiller`  | `WaterChillerController` — ESP-NOW peer  |
 | `dh`       | `DehumidifierController` — ESP-NOW peer  |
 
+Each installation also has a user-facing **system ID** (`SYSTEM_ID`, e.g.
+`RADIANT-001`) in the gateway's `Config.h`. The gateway publishes it in the
+**device registry** (`radiant/devices/<SYSTEM_ID>`) and in its heartbeat —
+the Flutter app uses it to **link** to this specific system (see §6).
+
 ## 3. Firebase Realtime Database structure
 
 Database URL shape: `https://<project>.firebaseio.com/`
@@ -68,19 +73,24 @@ radiant/
 ├── config/                      # writable by app, consumed by firmware
 │   ├── control/                 # gateway control params (chiller computation)
 │   │   └── params               # { comfort_setpoint_c, dewpoint_margin_c, weather_cool_temp_c }
+│   ├── weather/                 # app → gateway outdoor conditions (see §4)
 │   └── dh/                      # { humidity_setpoint_pct: 55, humidity_deadband_pct }
-└── heartbeat/                   # gateway writes, app can watch
-    └── monitor/                 # { online, firmware, ts }
+├── heartbeat/                   # gateway writes, app can watch
+│   └── monitor/                 # { online, device_id, firmware, ts }
+└── devices/                     # device registry (system linking)
+    └── <SYSTEM_ID>/             # { online, device_id, firmware, ts }
 ```
 
 ### 3.1 `telemetry/<device>/latest`
 
-`monitor` (6x DS18B20 + computed control values):
+`monitor` (6x DS18B20 on the chilled-water pipes + computed control values;
+`temps_c` = [supply, return, pipe1..pipe4]):
 
 ```json
 { "temps_c": [16.2, 16.8, 17.1, 22.4, 23.1, 22.8],
-  "dew_point_c": 18.0, "water_floor_c": 20.0, "pumps": "on",
-  "ts": 1786119829 }
+  "supply_c": 16.2, "return_c": 16.8, "coldest_pipe_c": 16.2,
+  "delta_t_c": 0.6, "dew_point_c": 18.0, "water_floor_c": 20.0,
+  "pumps": "on", "ts": 1786119829 }
 ```
 
 `chiller` (1x DS18B20 + pump states):
@@ -115,23 +125,30 @@ radiant/
 
 | Config key              | Node      | Type   | Meaning                                       |
 | ----------------------- | --------- | ------ | --------------------------------------------- |
-| `comfort_setpoint_c`    | `control` | float  | Rooms above this → cooling demand (°C)        |
+| `comfort_setpoint_c`    | `control` | float  | Indoor air (DHT22) above this → cooling demand (°C) |
 | `dewpoint_margin_c`     | `control` | float  | Water floor = dew point + margin (°C)         |
-| `weather_cool_temp_c`   | `control` | float  | Outdoor temp above this → weather demand (°C) |
-| `humidity_setpoint_pct` | `dh`      | float  | Dehumidifier target RH (%) — **55**           |
+| `weather_cool_temp_c`   | `control` | float  | Outdoor temp above this → weather demand (°C) || `humidity_setpoint_pct` | `dh`      | float  | Dehumidifier target RH (%) — **55**          |
 | `humidity_deadband_pct` | `dh`      | float  | RH hysteresis (%)                              |
+| `weather` (node)        | `weather` | object | Outdoor conditions from the app — see §4     |
 
-## 4. Weather API (gateway → WeatherAPI.com)
+## 4. Weather API (Flutter app → Firebase → gateway)
 
-The gateway fetches current outdoor conditions to drive the chiller
-computation (see §6 Data flows):
+The WeatherAPI.com **key is managed in the Flutter app**, never on the
+ESP32. The app polls the current-weather endpoint and writes the result to
+`radiant/config/weather`; the gateway streams that node like any other
+config (see §6).
 
-- **Endpoint:** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>`
+- **Endpoint (app):** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>`
 - **Fields used:** `current.temp_c`, `current.humidity`, `current.dewpoint_c`
-- **Throttle:** free tier has a daily call budget — keep the gateway's
-  `WEATHER_POLL_S` conservative (default 900 s = 15 min).
-- Credentials live in the gateway's `WEATHER_CONFIG.h` (git-ignored -
-  copy from `WEATHER_CONFIG.example.h`).
+- **Firebase path:** `radiant/config/weather` →
+  `{ "temp_c": 31.2, "dewpoint_c": 24.5, "humidity_pct": 66.0, "ts": 1786119829 }`
+- The gateway ignores the values once **stale** (older than
+  `WEATHER_STALE_S`, default 3600 s = 1 h — e.g. the app is offline) and
+  falls back to the **indoor** dew point only.
+- **Throttle:** the free tier has a daily call budget — the app should poll
+  conservatively (default 15 min, configurable in the app).
+- The app stores the key in `lib/config/app_config.dart` (git-ignored —
+  copy from `app_config.example.dart`).
 
 ## 5. ESP-NOW protocol
 
@@ -189,20 +206,25 @@ computation (see §6 Data flows):
    library (async, non-blocking).
 
 ### Chiller control (computed on the gateway)
-1. Gateway combines the WeatherAPI outdoor dew point, the indoor DHT22 dew
-   point, water temperature (chiller telemetry) and room temperatures
-   (6x DS18B20).
+1. The app polls WeatherAPI.com and writes the outdoor conditions to
+   `radiant/config/weather`; the gateway streams them and combines the
+   outdoor dew point, the indoor DHT22 temperature + humidity, the
+   chilled-water supply/return + pipe temperatures (6x DS18B20) and the
+   chiller tank temperature.
 2. Reference dew point = **higher of outdoor/indoor**; water floor = dew
    point + `dewpoint_margin_c` (anti-condensation).
-3. Pumps run when **weather demand** AND **sensor demand** AND water temp
+3. Pumps run when **weather demand** AND **sensor demand** (indoor DHT22
+   temperature above setpoint) AND the **coldest** pipe/tank temperature
    is safely above the floor (see `docs/diagrams/flow-chart.md`).
 4. On a decision change, the gateway sends the `set_pumps` command to the
-   chiller over ESP-NOW.
-
-### Commands (app → plant)
+   chiller over ESP-NOW.### Commands (app → plant)
+0. **Linking:** on first run the app asks for the system ID; it validates
+   it against the device registry (`radiant/devices/<SYSTEM_ID>`, written
+   by the gateway) and stores it locally. From then on the app reads only
+   that system's telemetry/state/heartbeat.
 1. App writes `config/<node>` in Firebase.
 2. The gateway **streams** `radiant/config` in real time (FirebaseClient
-   `stream()`) — changes arrive immediately, no polling.
+   `stream()` ) — changes arrive immediately, no polling.
 3. On change, the gateway applies `config/control` locally or forwards a
    `cmd`/`config` ESP-NOW message to the right peer.
 4. Peer applies the change and reports new `state` back.
@@ -231,6 +253,7 @@ Sensible defaults for this system:
 | `radiant/state/**`      | app                  | gateway |
 | `radiant/config/**`     | app + gateway        | app     |
 | `radiant/heartbeat/**`  | app                  | gateway |
+| `radiant/devices/**`    | app                  | gateway |
 
 **Ready-to-use rules:** [`firebase-security-rules.json`](firebase-security-rules.json) —
 paste the file contents into Firebase console → Realtime Database → Rules
