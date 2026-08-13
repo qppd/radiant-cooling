@@ -43,16 +43,16 @@ for the avoidance table and wiring notes.
 Each board only includes the modules it needs:
 
 | Module               | Monitor (gateway) | Chiller | Dehumidifier |
-| -------------------- | :---------------: | :-----: | :----------: |
-| `TemperatureSensor`  | ✅ (6x)           | ✅ (1x) | —            |
-| `HumiditySensor`     | —                 | —       | ✅           |
-| `SsrOutput`          | —                 | ✅ (×2) | ✅           |
-| `WifiProvisioner`    | ✅                | —       | —            |
-| `EspNowTransport`    | ✅                | ✅      | ✅           |
-| `JsonProtocol`       | ✅                | ✅      | ✅           |
-| `FirebaseSync`       | ✅                | —       | —            |
-| `WeatherApi`         | ✅                | —       | —            |
-| `ClimateControl`     | ✅                | —       | —            |
+| -------------------- | :---------------: | :------: | :----------: |
+| `TemperatureSensor`  | Yes (6x)          | Yes (1x) | —            |
+| `HumiditySensor`     | —                 | —        | Yes          |
+| `SsrOutput`          | —                 | Yes (×2) | Yes          |
+| `WifiProvisioner`    | Yes               | —        | —            |
+| `EspNowTransport`    | Yes               | Yes      | Yes          |
+| `JsonProtocol`       | Yes               | Yes      | Yes          |
+| `FirebaseSync`       | Yes               | —        | —            |
+| `WeatherApi`         | Yes               | —        | —            |
+| `ClimateControl`     | Yes               | —        | —            |
 
 ## Why modules are duplicated across folders
 
@@ -84,10 +84,14 @@ re-provision.
 
 Firebase is **two-way** on the gateway (Mobizt `FirebaseClient`, async):
 `setJson()`/`updateJson()` write telemetry/state to `radiant/telemetry/*`,
-and `stream()` listens to `radiant/config` in real time. Enable **Anonymous**
-or **Email/Password** auth in the Firebase console and put the Web API key
-in `FIREBASE_CONFIG.h` (`FIREBASE_API_KEY`; copy from
-`FIREBASE_CONFIG.example.h` — it is git-ignored).
+and `stream()` listens to `radiant/config` in real time. Enable
+**Email/Password** auth in the Firebase console (create a dedicated gateway
+account, e.g. `gateway@radiant-cooling.local`) and put the Web API key +
+credentials in `FIREBASE_CONFIG.h` (`FIREBASE_API_KEY`, `FIREBASE_EMAIL`,
+`FIREBASE_PASSWORD`; copy from `FIREBASE_CONFIG.example.h` — it is
+git-ignored). Note: `docs/firebase-security-rules.json` identifies the
+gateway by `auth.token.email`, so the gateway must sign in with
+email/password (not anonymous) when those rules are used.
 
 ## Implemented behavior
 
@@ -106,6 +110,19 @@ in `FIREBASE_CONFIG.h` (`FIREBASE_API_KEY`; copy from
   (`set_humidity_target`, `enable`/`disable`, `reset`), runs the 55 %%RH
   hysteresis loop, and streams `temp_c`/`humidity_pct` telemetry. After 3
   consecutive sensor read failures it fails safe (dehumidifier off).
+
+## Unit tests
+
+Host-machine tests for the pure-math modules live in
+[`src/esp/tests/`](tests/README.md) (stub `Arduino.h`, no Arduino toolchain
+needed). Currently covered: `ClimateControl` — Magnus dew point + the pump
+decision logic (weather/sensor demands, condensation protection,
+hysteresis, reference dew point selection).
+
+```bash
+cd src/esp/tests
+./run_tests.sh     # requires g++ (Git Bash / WSL on Windows works)
+```
 
 ## Working with the sketches
 

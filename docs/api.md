@@ -225,19 +225,28 @@ computation (see §6 Data flows):
 Realtime Database **security rules** decide who can read/write each path.
 Sensible defaults for this system:
 
-| Path                    | Read            | Write           |
-| ----------------------- | --------------- | --------------- |
-| `radiant/telemetry/**`  | app             | gateway         |
-| `radiant/state/**`      | app             | gateway         |
-| `radiant/config/**`     | gateway         | app             |
-| `radiant/heartbeat/**`  | app             | gateway         |
+| Path                    | Read                 | Write   |
+| ----------------------- | -------------------- | -------- |
+| `radiant/telemetry/**`  | app                  | gateway |
+| `radiant/state/**`      | app                  | gateway |
+| `radiant/config/**`     | app + gateway        | app     |
+| `radiant/heartbeat/**`  | app                  | gateway |
 
-- The **gateway** authenticates via FirebaseClient — email/password or
-  anonymous sign-in (the corresponding provider must be enabled in Firebase
-  console → Auth). Credentials live in the gateway's `FIREBASE_CONFIG.h`
-  (git-ignored - copy from `FIREBASE_CONFIG.example.h`).
+**Ready-to-use rules:** [`firebase-security-rules.json`](firebase-security-rules.json) —
+paste the file contents into Firebase console → Realtime Database → Rules
+(or deploy via `firebase deploy --only database`).
+
+- The **gateway** authenticates via FirebaseClient — **email/password with a
+  dedicated account** (e.g. `gateway@radiant-cooling.local`). The rules above
+  identify the gateway by `auth.token.email` (replace the placeholder email
+  with the account you create), so **anonymous sign-in cannot be used for the
+  gateway** with these rules — the writer role would be indistinguishable
+  from the app.
 - The **app** authenticates via the Firebase SDK (anonymous or Google sign-in
-  for personal use).
+  for personal use); any authenticated user may read telemetry/state/config/heartbeat
+  and write `config/**`.
+- `config/**` is written by the app and read by both the app (dashboard
+  display) and the gateway (stream).
 - Rules are versioned alongside the data paths.
 
 ## 9. Versioning

@@ -1,4 +1,4 @@
-# ❄️ Radiant Cooling System
+# Radiant Cooling System
 
 [![GitHub repo](https://img.shields.io/badge/repo-qppd%2Fradiant--cooling-181717?logo=github&style=flat)](https://github.com/qppd/radiant-cooling)
 [![ESP32](https://img.shields.io/badge/ESP32-WROOM--32-8B9DC3?style=flat)](#hardware)
@@ -51,17 +51,17 @@ and the gateway is the only device with Wi-Fi.
 
 ## Features
 
-- 🛰️ **ESP-NOW mesh** — peer-to-peer, no router or broker required between boards
-- ☁️ **Two-way Firebase** — realtime *streaming* of config changes from the app,
+- **ESP-NOW mesh** — peer-to-peer, no router or broker required between boards
+- **Two-way Firebase** — realtime *streaming* of config changes from the app,
   plus telemetry/state writes (Mobizt `FirebaseClient`, async, non-blocking)
-- 🌦️ **Weather-aware pump control** — combines WeatherAPI.com dew point,
+- **Weather-aware pump control** — combines WeatherAPI.com dew point,
   indoor humidity, water temperature and room temperatures; anti-condensation
   water-floor protection
-- 💧 **Dehumidifier** — holds indoor RH at 55% with hysteresis
-- 📶 **WiFiManager provisioning** — captive portal on first boot; hold the
+- **Dehumidifier** — holds indoor RH at 55% with hysteresis
+- **WiFiManager provisioning** — captive portal on first boot; hold the
   reset button 3 s to re-provision
-- 📱 **Flutter Android app** — monitoring and configuration (scaffold in place)
-- 🧩 **Modular firmware** — every component and library encapsulated in its own
+- **Flutter Android app** — monitoring and configuration (scaffold in place)
+- **Modular firmware** — every component and library encapsulated in its own
   class (sensor, SSR, ESP-NOW, JSON, Firebase, Weather, Climate)
 
 ## System Architecture
@@ -165,15 +165,20 @@ are next on the roadmap.
 ## Firebase Setup
 
 1. Create a Firebase project and enable **Realtime Database**.
-2. Enable **Anonymous** (or Email/Password) authentication in *Auth → Sign-in
-   method*.
+2. Enable **Email/Password** authentication in *Auth → Sign-in method* for
+   the **gateway** (create a dedicated account, e.g.
+   `gateway@radiant-cooling.local`). Enable **Anonymous** too if the app
+   uses anonymous sign-in.
 3. Copy `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` in the gateway
    folder and paste the database URL, **Web API key**, and (if using
    email/password auth) credentials — the file is git-ignored so secrets
    stay local.
-4. Apply security rules that let the gateway write `telemetry`/`state` and
-   read `config`, and the app do the reverse (see
-   [`docs/api.md`](docs/api.md#8-firebase-security-rules--auth)).
+4. Apply the security rules in
+   [`docs/firebase-security-rules.json`](docs/firebase-security-rules.json)
+   (paste into *Realtime Database → Rules* or deploy with
+   `firebase deploy --only database`). The gateway must use a dedicated
+   **email/password** account (replace the placeholder email in the rules) —
+   see [`docs/api.md`](docs/api.md#8-firebase-security-rules--auth).
 
 ## Documentation
 
@@ -204,7 +209,8 @@ are next on the roadmap.
 - [x] ESP-NOW handlers + telemetry (receive queue, cmd/config processing, heartbeat) on all three boards
 - [x] Wire the `onConfigStream` handler (control params + peer forwarding)
 - [ ] Flutter app: Firebase SDK, dashboard, control screens
-- [ ] Firebase security rules file in `docs/`
+- [x] Firebase security rules file in `docs/` (`firebase-security-rules.json`)
+- [x] Unit tests for `ClimateControl` (dew point + pump decision, `src/esp/tests/`)
 - [ ] `LICENSE` file
 
 ## License
@@ -218,7 +224,7 @@ added soon.
   <img src="https://avatars.githubusercontent.com/u/140778693?v=4" width="90" height="90" alt="avatar" align="left" style="border-radius:50%" />
   <b>Sajed Lopez Mendoza</b><br/>
   <i>Building intelligent solutions</i><br/>
-  📍 136 Sitio Crossing, Ilaya Panaon, Unisan, Quezon 4305<br/>
+  136 Sitio Crossing, Ilaya Panaon, Unisan, Quezon 4305<br/>
   <a href="https://github.com/qppd">GitHub: @qppd</a> ·
   <a href="https://www.linkedin.com/in/sajed-mendoza">LinkedIn</a>
 </p>

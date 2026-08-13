@@ -7,8 +7,15 @@
  *    credentials stay local and are never committed.
  *
  * Setup: firebase.google.com -> project -> Realtime Database (get the URL)
- * and Project settings -> General (Web API key). Enable Anonymous or
- * Email/Password sign-in under Authentication -> Sign-in method.
+ * and Project settings -> General (Web API key).
+ *
+ * IMPORTANT: use a dedicated EMAIL/PASSWORD account for the gateway (e.g.
+ * gateway@radiant-cooling.local) and replace the placeholder email in
+ * docs/firebase-security-rules.json with it - the rules identify the
+ * gateway by auth.token.email. Leaving FIREBASE_EMAIL empty (anonymous)
+ * means the gateway CANNOT write telemetry/state/heartbeat under those
+ * rules. Enable Email/Password (and optionally Anonymous for the app) in
+ * Authentication -> Sign-in method.
  */
 #pragma once
 #include <Arduino.h>
@@ -16,5 +23,5 @@
 // ---- Firebase Realtime Database (Mobizt FirebaseClient) ----
 static const char FIREBASE_URL[]      = "https://<project>-default-rtdb.firebaseio.com/";
 static const char FIREBASE_API_KEY[]  = "your-web-api-key";   // Firebase Web API key
-static const char FIREBASE_EMAIL[]    = "";                   // "" = anonymous sign-in
-static const char FIREBASE_PASSWORD[] = "";                   // email/password auth
+static const char FIREBASE_EMAIL[]    = "gateway@radiant-cooling.local";  // must match rules email
+static const char FIREBASE_PASSWORD[] = "your-gateway-password";          // email/password auth

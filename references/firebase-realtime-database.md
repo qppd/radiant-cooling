@@ -10,7 +10,9 @@
 - **Streaming:** clients can listen to a path and receive events whenever any
   value under it changes (this replaces polling).
 - **Security rules** decide who can read/write each path — see
-  `docs/api.md §8`.
+  `docs/api.md §8`. Ready-to-use rules for the `radiant/` tree:
+  `docs/firebase-security-rules.json` (gateway = email/password account,
+  identified by `auth.token.email`; app = any authenticated user).
 
 ## FirebaseClient library (Mobizt)
 
@@ -58,6 +60,8 @@ Stream event callback: `aResult.isStream() && aResult.isData()`, payload via
   `radiant/telemetry/*` and `radiant/state/*`; `stream()` listens to
   `radiant/config` in real time. The stream auto-starts in `loop()` once the
   async sign-in completes and re-arms on reconnect.
+- The gateway must sign in with **email/password** (not anonymous) for the
+  `firebase-security-rules.json` writer role to match (`auth.token.email`).
 - `docs/api.md` defines the full data schema.
 
 ## Links

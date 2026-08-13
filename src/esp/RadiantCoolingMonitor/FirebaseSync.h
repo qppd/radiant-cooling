@@ -24,8 +24,12 @@ public:
   struct Config {
     const char* url      = nullptr;   // e.g. "https://<project>-default-rtdb.firebaseio.com/"
     const char* apiKey   = nullptr;   // Web API key
-    const char* email    = nullptr;   // "" or nullptr = anonymous sign-in
+    const char* email    = nullptr;   // "" or nullptr = anonymous sign-in (but see rules note below)
     const char* password = nullptr;   // email/password auth
+
+    // NOTE: docs/firebase-security-rules.json identifies the gateway by
+    // auth.token.email, so the gateway should use email/password (not
+    // anonymous) when those rules are deployed.
   };
 
   // Stream event callback: path (changed node) + json (new value).

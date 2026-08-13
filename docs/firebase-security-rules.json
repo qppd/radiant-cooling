@@ -1,0 +1,39 @@
+{
+  "rules": {
+    "radiant": {
+      "telemetry": {
+        "$device": {
+          "$node": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'",
+            ".validate": "newData.hasChildren(['ts']) && newData.child('ts').isNumber()"
+          }
+        }
+      },
+      "state": {
+        "$device": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'",
+          ".validate": "(!newData.hasChildren(['pump1']) || newData.child('pump1').val() == 'on' || newData.child('pump1').val() == 'off') && (!newData.hasChildren(['pump2']) || newData.child('pump2').val() == 'on' || newData.child('pump2').val() == 'off') && (!newData.hasChildren(['dehumidifier']) || newData.child('dehumidifier').val() == 'on' || newData.child('dehumidifier').val() == 'off')"
+        }
+      },
+      "config": {
+        ".read": "auth != null",
+        "control": {
+          ".write": "auth != null",
+          ".validate": "(!newData.hasChildren(['comfort_setpoint_c']) || newData.child('comfort_setpoint_c').isNumber()) && (!newData.hasChildren(['dewpoint_margin_c']) || newData.child('dewpoint_margin_c').isNumber()) && (!newData.hasChildren(['weather_cool_temp_c']) || newData.child('weather_cool_temp_c').isNumber())"
+        },
+        "dh": {
+          ".write": "auth != null",
+          ".validate": "(!newData.hasChildren(['humidity_setpoint_pct']) || (newData.child('humidity_setpoint_pct').isNumber() && newData.child('humidity_setpoint_pct').val() >= 20 && newData.child('humidity_setpoint_pct').val() <= 90)) && (!newData.hasChildren(['humidity_deadband_pct']) || (newData.child('humidity_deadband_pct').isNumber() && newData.child('humidity_deadband_pct').val() >= 0 && newData.child('humidity_deadband_pct').val() <= 20))"
+        }
+      },
+      "heartbeat": {
+        "$node": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'"
+        }
+      }
+    }
+  }
+}

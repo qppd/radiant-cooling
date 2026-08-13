@@ -26,7 +26,7 @@
 
 ## Safety
 
-- ⚠️ **220 V mains work requires proper care**: fuse the input, use an
+- **Warning:** 220 V mains work requires proper care: fuse the input, use an
   insulated enclosure, and keep all mains wiring away from the low-voltage
   side.
 - Never connect sensors or SSR inputs to the 5 V pin; GPIOs are 3.3 V.
