@@ -32,7 +32,7 @@
 | Board-to-board  | ESP-NOW                             | 250 B max payload; protocol in [`api.md`](api.md) |
 | Board-to-cloud  | HTTPS REST to Firebase RTDB         | Gateway board only                    |
 | Cloud database  | Firebase Realtime Database          | JSON tree; path scheme in `api.md`    |
-| Weather data    | WeatherAPI.com (free tier)          | Flutter app calls the API and writes `config/weather`; the gateway streams it |
+| Weather data    | WeatherAPI.com (free tier)          | Gateway fetches it; the app delivers the API key via `config/weather_key` |
 | Provisioning    | WiFiManager captive portal (gateway)| Enter SSID/password once; reset button (GPIO 33) to re-provision |
 
 ## Documentation

@@ -23,9 +23,10 @@
           ".write": "auth != null",
           ".validate": "(!newData.hasChildren(['comfort_setpoint_c']) || newData.child('comfort_setpoint_c').isNumber()) && (!newData.hasChildren(['dewpoint_margin_c']) || newData.child('dewpoint_margin_c').isNumber()) && (!newData.hasChildren(['weather_cool_temp_c']) || newData.child('weather_cool_temp_c').isNumber())"
         },
-        "weather": {
+        "weather_key": {
+          ".read": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'",
           ".write": "auth != null",
-          ".validate": "(!newData.hasChildren(['temp_c']) || newData.child('temp_c').isNumber()) && (!newData.hasChildren(['dewpoint_c']) || newData.child('dewpoint_c').isNumber()) && (!newData.hasChildren(['humidity_pct']) || newData.child('humidity_pct').isNumber()) && (!newData.hasChildren(['ts']) || newData.child('ts').isNumber())"
+          ".validate": "newData.isString() && newData.val().length() > 0 && newData.val().length() <= 64"
         },
         "dh": {
           ".write": "auth != null",

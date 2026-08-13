@@ -27,6 +27,7 @@ only (wiring + control logic).
 ├── EspNowTransport.{h,cpp}     # comms:    ESP-NOW    (wraps WiFi + esp_now)
 ├── JsonProtocol.{h,cpp}        # protocol: JSON envelope (wraps ArduinoJson)
 ├── FirebaseSync.{h,cpp}        # cloud:    Firebase RTDB set/update + realtime stream (wraps FirebaseClient) [gateway only]
+├── WeatherApi.{h,cpp}          # cloud:    WeatherAPI.com current weather (key from the app) [gateway only]
 └── ClimateControl.{h,cpp}      # control:  dew point + pump decision [gateway only]
 ```
 
@@ -49,6 +50,7 @@ Each board only includes the modules it needs:
 | `EspNowTransport`    | Yes               | Yes      | Yes          |
 | `JsonProtocol`       | Yes               | Yes      | Yes          |
 | `FirebaseSync`       | Yes               | —        | —            |
+| `WeatherApi`         | Yes               | —        | —            |
 | `ClimateControl`     | Yes               | —        | —            |
 
 ## Why modules are duplicated across folders
@@ -70,11 +72,13 @@ if the duplication becomes a burden.
 | `FirebaseClient`    | monitor         | Mobizt; the old `Firebase-ESP-Client` is deprecated |
 | `WiFiManager`       | monitor         | tzapu - captive-portal WiFi provisioning            |
 
-ESP-NOW (`esp_now.h`) and WiFi are built into the Arduino ESP32 core.
-Outdoor weather is **not** fetched by the firmware: the Flutter app calls
-WeatherAPI.com (key stored app-side) and writes `radiant/config/weather`
-to Firebase; the gateway streams it (see `docs/api.md §4`). Weather older
-than `WEATHER_STALE_S` (default 1 h) is ignored.
+ESP-NOW (`esp_now.h`), WiFi, and `HTTPClient` (used by `WeatherApi`) are
+built into the Arduino ESP32 core. The gateway fetches outdoor weather
+from WeatherAPI.com itself; the API key is **managed by the Flutter app**
+and delivered at runtime via `radiant/config/weather_key` — it is never
+compiled into the firmware (see `docs/api.md §4`). Failed or stale fetches
+(`WEATHER_STALE_S`, default 1 h) disable weather demand and fall back to
+the indoor dew point.
 
 WiFi credentials are **not** stored in code — they are entered once through
 the WiFiManager captive portal (AP `RadiantCooling-AP`). Hold the gateway's
@@ -135,8 +139,9 @@ cd src/esp/tests
    MACs, `SYSTEM_ID`), `FIREBASE_CONFIG.h` (Firebase URL + Web API key -
    copy from `FIREBASE_CONFIG.example.h`; it is git-ignored), and check
    `PINS_CONFIG.h` (pins). WiFi credentials are entered via the captive
-   portal on first boot - nothing to fill in. The WeatherAPI key lives in
-   the Flutter app, not on the board.
+   portal on first boot - nothing to fill in. The WeatherAPI key is
+   entered in the Flutter app (delivered to the gateway at runtime); the
+   weather location `WEATHER_LOCATION` is set in `Config.h`.
 
 ## References
 

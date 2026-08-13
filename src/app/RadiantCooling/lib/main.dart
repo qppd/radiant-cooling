@@ -1,12 +1,10 @@
-import 'dart:async';
-
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'config/app_config.dart';
 import 'services/device_link.dart';
 import 'services/radiant_firebase.dart';
-import 'services/weather_service.dart';
+import 'services/weather_key_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -39,12 +37,11 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final _deviceLink = DeviceLink();
+  final _keyStore = WeatherKeyStore();
   late final RadiantFirebase _firebase;
-  final _weather = WeatherService();
 
   String? _linkedId;
-  WeatherConditions _wx = const WeatherConditions(ok: false);
-  Timer? _weatherTimer;
+  String? _weatherKey;
   List<String> _knownSystems = const [];
 
   @override
@@ -54,50 +51,50 @@ class _HomeScreenState extends State<HomeScreen> {
     _load();
   }
 
-  @override
-  void dispose() {
-    _weatherTimer?.cancel();
-    super.dispose();
-  }
-
   Future<void> _load() async {
     final id = await _deviceLink.load();
+    final key = await _keyStore.load();
     if (!mounted) return;
-    setState(() => _linkedId = id);
-    if (id != null) _startWeatherPolling();
+    setState(() {
+      _linkedId = id;
+      _weatherKey = key;
+    });
+    // The gateway keeps the key in RAM only, so re-deliver it whenever the
+    // app starts (e.g. after a gateway reboot).
+    if (id != null && key != null && key.isNotEmpty) {
+      await _publishKey(key);
+    }
   }
 
-  void _startWeatherPolling() {
-    _weatherTimer?.cancel();
-    _refreshWeather();
-    _weatherTimer = Timer.periodic(
-      Duration(minutes: AppConfig.weatherPollMinutes),
-      (_) => _refreshWeather(),
-    );
-  }
-
-  Future<void> _refreshWeather() async {
-    final wx = await _weather.fetchCurrent();
-    if (!mounted) return;
-    setState(() => _wx = wx);
-    // Publish to Firebase only once a system is linked; the gateway streams
-    // this node and uses it for the pump decision.
-    if (wx.ok && _linkedId != null) {
-      try {
-        await _firebase.publishWeather(wx);
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Could not publish weather — check the Firebase setup '
-                '(google-services.json).',
-              ),
+  Future<void> _publishKey(String key) async {
+    if (_linkedId == null) return;
+    try {
+      await _firebase.publishWeatherKey(key);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Could not deliver the WeatherAPI key — check the Firebase '
+              'setup (google-services.json).',
             ),
-          );
-        }
+          ),
+        );
       }
     }
+  }
+
+  Future<void> _manageKey() async {
+    final controller = TextEditingController(text: _weatherKey ?? '');
+    final key = await showDialog<String>(
+      context: context,
+      builder: (context) => _KeyDialog(controller: controller),
+    );
+    if (key == null || key.isEmpty) return;
+    await _keyStore.save(key);
+    if (!mounted) return;
+    setState(() => _weatherKey = key);
+    await _publishKey(key);
   }
 
   Future<void> _linkSystem() async {
@@ -162,7 +159,11 @@ class _HomeScreenState extends State<HomeScreen> {
     await _deviceLink.save(id);
     if (!mounted) return;
     setState(() => _linkedId = id);
-    _startWeatherPolling();
+    // Re-deliver the key now that a system is linked.
+    if (_weatherKey != null && _weatherKey!.isNotEmpty) {
+      await _publishKey(_weatherKey!);
+    }
+    if (!mounted) return;
     if (!known) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -176,7 +177,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(title: const Text('Radiant Cooling')),
       body: ListView(
@@ -198,59 +198,21 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 12),
           Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.wb_sunny_outlined),
-                      const SizedBox(width: 8),
-                      Text('Outdoor weather', style: theme.textTheme.titleMedium),
-                      const Spacer(),
-                      IconButton(
-                        tooltip: 'Refresh',
-                        onPressed: _refreshWeather,
-                        icon: const Icon(Icons.refresh),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (_wx.ok)
-                    Wrap(
-                      spacing: 24,
-                      runSpacing: 8,
-                      children: [
-                        _Metric(
-                          label: 'Temp',
-                          value: '${_wx.tempC.toStringAsFixed(1)} °C',
-                        ),
-                        _Metric(
-                          label: 'Dew point',
-                          value: '${_wx.dewPointC.toStringAsFixed(1)} °C',
-                        ),
-                        _Metric(
-                          label: 'Humidity',
-                          value: '${_wx.humidityPct.toStringAsFixed(0)} %',
-                        ),
-                      ],
-                    )
-                  else
-                    const Text(
-                      'Weather not available — check the API key in '
-                      'lib/config/app_config.dart.',
-                    ),
-                  const SizedBox(height: 8),
-                  Text(
-                    _linkedId == null
-                        ? 'Link a system to start publishing weather to the '
-                            'gateway (radiant/config/weather).'
-                        : 'Published to radiant/config/weather for '
-                            '$_linkedId.',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
+            child: ListTile(
+              leading: Icon(
+                _weatherKey == null ? Icons.key_off : Icons.key,
+              ),
+              title: Text(
+                _weatherKey == null ? 'No WeatherAPI key' : 'WeatherAPI key set',
+              ),
+              subtitle: const Text(
+                'Managed from this app and delivered to the gateway '
+                '(radiant/config/weather_key). The ESP32 fetches the '
+                'weather itself.',
+              ),
+              trailing: TextButton(
+                onPressed: _manageKey,
+                child: Text(_weatherKey == null ? 'Set key' : 'Change'),
               ),
             ),
           ),
@@ -260,19 +222,56 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _Metric extends StatelessWidget {
-  const _Metric({required this.label, required this.value});
+class _KeyDialog extends StatefulWidget {
+  const _KeyDialog({required this.controller});
 
-  final String label;
-  final String value;
+  final TextEditingController controller;
+
+  @override
+  State<_KeyDialog> createState() => _KeyDialogState();
+}
+
+class _KeyDialogState extends State<_KeyDialog> {
+  bool _obscure = true;
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: Theme.of(context).textTheme.bodySmall),
-        Text(value, style: Theme.of(context).textTheme.titleLarge),
+    return AlertDialog(
+      title: const Text('WeatherAPI key'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Enter your WeatherAPI.com key. It is stored on this phone and '
+            'sent to the gateway via Firebase; the ESP32 uses it for its '
+            'own weather requests.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: widget.controller,
+            obscureText: _obscure,
+            decoration: InputDecoration(
+              labelText: 'API key',
+              hintText: 'e.g. 1a2b3c4d5e6f...',
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _obscure ? Icons.visibility : Icons.visibility_off,
+                ),
+                onPressed: () => setState(() => _obscure = !_obscure),
+              ),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, widget.controller.text.trim()),
+          child: const Text('Save'),
+        ),
       ],
     );
   }

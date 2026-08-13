@@ -73,7 +73,7 @@ radiant/
 ├── config/                      # writable by app, consumed by firmware
 │   ├── control/                 # gateway control params (chiller computation)
 │   │   └── params               # { comfort_setpoint_c, dewpoint_margin_c, weather_cool_temp_c }
-│   ├── weather/                 # app → gateway outdoor conditions (see §4)
+│   ├── weather_key/             # WeatherAPI key, app → gateway (see §4)
 │   └── dh/                      # { humidity_setpoint_pct: 55, humidity_deadband_pct }
 ├── heartbeat/                   # gateway writes, app can watch
 │   └── monitor/                 # { online, device_id, firmware, ts }
@@ -129,26 +129,28 @@ radiant/
 | `dewpoint_margin_c`     | `control` | float  | Water floor = dew point + margin (°C)         |
 | `weather_cool_temp_c`   | `control` | float  | Outdoor temp above this → weather demand (°C) || `humidity_setpoint_pct` | `dh`      | float  | Dehumidifier target RH (%) — **55**          |
 | `humidity_deadband_pct` | `dh`      | float  | RH hysteresis (%)                              |
-| `weather` (node)        | `weather` | object | Outdoor conditions from the app — see §4     |
+| `weather_key` (node)    | `weather_key` | string | WeatherAPI key delivered to the gateway — see §4 |
 
-## 4. Weather API (Flutter app → Firebase → gateway)
+## 4. Weather API (monitor board fetches; key managed by the app)
 
-The WeatherAPI.com **key is managed in the Flutter app**, never on the
-ESP32. The app polls the current-weather endpoint and writes the result to
-`radiant/config/weather`; the gateway streams that node like any other
-config (see §6).
+The **monitor (gateway) board** fetches the current outdoor conditions
+itself from WeatherAPI.com. The API key is **managed by the Flutter app**
+and delivered to the gateway at runtime — it is never compiled into the
+firmware.
 
-- **Endpoint (app):** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>`
+- **Endpoint (gateway):** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>`
 - **Fields used:** `current.temp_c`, `current.humidity`, `current.dewpoint_c`
-- **Firebase path:** `radiant/config/weather` →
-  `{ "temp_c": 31.2, "dewpoint_c": 24.5, "humidity_pct": 66.0, "ts": 1786119829 }`
-- The gateway ignores the values once **stale** (older than
-  `WEATHER_STALE_S`, default 3600 s = 1 h — e.g. the app is offline) and
-  falls back to the **indoor** dew point only.
-- **Throttle:** the free tier has a daily call budget — the app should poll
-  conservatively (default 15 min, configurable in the app).
+- **Key delivery:** the app writes the key to `radiant/config/weather_key`
+  (a string); the gateway streams it and keeps it in RAM. A gateway reboot
+  loses it, so the app re-sends it on launch / (re)link.
+- **Throttle:** the gateway polls every `WEATHER_POLL_S` (default 900 s =
+  15 min) to stay inside the free-tier daily call budget.
+- **Failure handling:** on a failed fetch (bad/absent key, API unreachable)
+  the last good values are kept; once older than `WEATHER_STALE_S` (default
+  3600 s = 1 h) weather demand turns off and the condensation floor falls
+  back to the **indoor** dew point only.
 - The app stores the key in `lib/config/app_config.dart` (git-ignored —
-  copy from `app_config.example.dart`).
+  copy from `app_config.example.dart`) or enters it in the app.
 
 ## 5. ESP-NOW protocol
 
@@ -206,11 +208,10 @@ config (see §6).
    library (async, non-blocking).
 
 ### Chiller control (computed on the gateway)
-1. The app polls WeatherAPI.com and writes the outdoor conditions to
-   `radiant/config/weather`; the gateway streams them and combines the
-   outdoor dew point, the indoor DHT22 temperature + humidity, the
-   chilled-water supply/return + pipe temperatures (6x DS18B20) and the
-   chiller tank temperature.
+1. The gateway polls WeatherAPI.com (key delivered by the app via
+   `radiant/config/weather_key`) and combines the outdoor dew point, the
+   indoor DHT22 temperature + humidity, the chilled-water supply/return +
+   pipe temperatures (6x DS18B20) and the chiller tank temperature.
 2. Reference dew point = **higher of outdoor/indoor**; water floor = dew
    point + `dewpoint_margin_c` (anti-condensation).
 3. Pumps run when **weather demand** AND **sensor demand** (indoor DHT22
@@ -270,6 +271,8 @@ paste the file contents into Firebase console → Realtime Database → Rules
   and write `config/**`.
 - `config/**` is written by the app and read by both the app (dashboard
   display) and the gateway (stream).
+- `config/weather_key` is special-cased: written by the app, readable only
+  by the gateway (it holds the WeatherAPI key).
 - Rules are versioned alongside the data paths.
 
 ## 9. Versioning

@@ -70,7 +70,7 @@ flowchart LR
     DHC -->|"SSR"| DHU
 
     GW <-->|"Wi-Fi / HTTPS"| FB
-    UI <-->|"HTTPS"| WX
+    GW <-->|"HTTPS"| WX
     FB <-->|"Firebase SDK"| UI
 ```
 
@@ -97,7 +97,7 @@ flowchart LR
 | Dehumidifier             | Actuator            | Removes humidity (SSR-controlled)                    |
 | Power supplies (3)       | Power               | One 220V→5V/3A supply per board (isolated)           |
 | Firebase RTDB            | Cloud               | Shared database for app and firmware                 |
-| WeatherAPI.com           | Cloud (app)         | Outdoor dew point + temperature; key in the app, data via Firebase |
+| WeatherAPI.com           | Cloud               | Outdoor dew point + temperature; gateway calls it with the app-managed key |
 | `RadiantCooling` app     | App                 | Monitoring and configuration UI (Android)            |
 
 ## Notes

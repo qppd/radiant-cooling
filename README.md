@@ -38,10 +38,10 @@ A complete control and monitoring system for a **radiant cooling**
 installation. Three ESP32 boards form a wireless mesh:
 
 - **RadiantCoolingMonitor** (gateway) reads **6× DS18B20** water/pipe
-  temperatures, collects data from the other boards, receives outdoor
-  weather from the Flutter app, and pushes everything to Firebase — while
-  also computing the chiller pump control (weather-driven + condensation
-  protection).
+  temperatures, collects data from the other boards, fetches outdoor
+  weather (API key managed by the app), and pushes everything to Firebase —
+  while also computing the chiller pump control (weather-driven +
+  condensation protection).
 - **WaterChillerController** switches **2 water pumps (SSR)** on command from
   the gateway.
 - **DehumidifierController** holds indoor humidity at **55% RH** with its
@@ -72,7 +72,7 @@ and the gateway is the only device with Wi-Fi.
 │WaterChiller    │◄───────────►│RadiantCoolingMonitor     │
 │Controller      │             │(gateway: WiFiManager +   │
 └────────────────┘             │ Firebase stream +        │
-┌────────────────┐   ESP-NOW   │ Firebase + ESP-NOW)      │
+┌────────────────┐   ESP-NOW   │ WeatherAPI + ESP-NOW)    │
 │Dehumidifier    │◄───────────►│                          │
 │Controller      │             └────────────┬─────────────┘
 └────────────────┘                          │ HTTPS
@@ -135,8 +135,9 @@ radiant-cooling/
   `ArduinoJson`, `FirebaseClient` (Mobizt), `WiFiManager` (tzapu)
 - [Flutter SDK](https://flutter.dev) (for the app)
 - A [Firebase](https://firebase.google.com) project with Realtime Database
-- A free [WeatherAPI.com](https://www.weatherapi.com) API key (used by the
-  Flutter app — the firmware never stores it)
+- A free [WeatherAPI.com](https://www.weatherapi.com) API key (managed from
+  the Flutter app and delivered to the gateway at runtime — never compiled
+  into the firmware)
 
 ### Firmware
 
@@ -144,8 +145,9 @@ radiant-cooling/
    ESP32 board + COM port, and upload.
 2. Fill in the config headers: on the gateway copy
    `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` (git-ignored), and
-   set the peer/gateway MAC addresses and the `SYSTEM_ID` in `Config.h`
-   for each board. The WeatherAPI key lives in the Flutter app only.
+   set the peer/gateway MAC addresses, the `SYSTEM_ID`, and the
+   `WEATHER_LOCATION` in `Config.h` for each board. The WeatherAPI key is
+   managed from the Flutter app.
 3. On first boot the gateway opens a **WiFiManager portal** (AP
    `RadiantCooling-AP`) — connect to it from your phone and enter your
    network credentials.
@@ -169,9 +171,9 @@ Setup before first run:
    `google-services` Gradle plugin — see
    [`references/flutter-android-firebase.md`](references/flutter-android-firebase.md).
 2. Copy `lib/config/app_config.example.dart` → `lib/config/app_config.dart`
-   and fill in the **WeatherAPI.com key** (git-ignored — the firmware never
-   stores it). The app polls WeatherAPI.com and writes the outdoor
-   conditions to `radiant/config/weather`, which the gateway streams.
+   and fill in the **WeatherAPI.com key** (git-ignored). The app delivers
+   the key to the gateway via `radiant/config/weather_key`; the **gateway
+   fetches the weather itself**.
 3. On first launch, **link** the app to your system by entering the
    `SYSTEM_ID` from the gateway's `Config.h` (the gateway publishes it in
    `radiant/devices/<SYSTEM_ID>`).

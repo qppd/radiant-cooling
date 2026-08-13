@@ -26,7 +26,7 @@ touching it. Radiant cooling keeps the chilled-water supply above
 `dew point + margin`:
 
 ```
-refDewPoint = max(outdoorDewPoint (WeatherAPI via the app), indoorDewPoint (DHT22))
+refDewPoint = max(outdoorDewPoint (WeatherAPI), indoorDewPoint (DHT22))
 waterFloor  = refDewPoint + dewpoint_margin_c
 ```
 

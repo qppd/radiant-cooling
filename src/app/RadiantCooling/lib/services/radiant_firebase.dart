@@ -1,11 +1,10 @@
 import 'package:firebase_database/firebase_database.dart';
 
-import 'weather_service.dart';
-
 /// Firebase Realtime Database access for the app:
 ///
-/// - writes outdoor weather to `radiant/config/weather` (the gateway
-///   streams this path and uses it for the pump decision);
+/// - delivers the WeatherAPI key to `radiant/config/weather_key` (the
+///   gateway streams this path and uses the key for its OWN WeatherAPI
+///   calls — the ESP32 fetches the weather, the app only manages the key);
 /// - discovers/validates systems via the device registry
 ///   (`radiant/devices/<system_id>`, written by the gateway);
 /// - exposes the telemetry/state/heartbeat paths for the linked system.
@@ -19,16 +18,11 @@ class RadiantFirebase {
 
   DatabaseReference get _devicesRef => _db.ref('radiant/devices');
 
-  DatabaseReference get _weatherRef => _db.ref('radiant/config/weather');
-
-  /// Publish outdoor weather for the gateway (it streams this path).
-  Future<void> publishWeather(WeatherConditions wx) async {
-    await _weatherRef.set({
-      'temp_c': wx.tempC,
-      'dewpoint_c': wx.dewPointC,
-      'humidity_pct': wx.humidityPct,
-      'ts': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-    });
+  /// Send the WeatherAPI key to the gateway. The gateway keeps it in RAM
+  /// only, so the app should re-send it whenever the system is (re)linked
+  /// or the app starts.
+  Future<void> publishWeatherKey(String apiKey) async {
+    await _db.ref('radiant/config/weather_key').set(apiKey);
   }
 
   /// List known systems — each registry key is a `SYSTEM_ID` the user can

@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:radiant_cooling/services/device_link.dart';
+import 'package:radiant_cooling/services/weather_key_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -20,5 +21,18 @@ void main() {
 
     await link.clear();
     expect(await link.load(), isNull);
+  });
+
+  test('WeatherKeyStore persists and loads the API key', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    final store = WeatherKeyStore();
+    expect(await store.load(), isNull);
+
+    await store.save('  abc123def456  ');
+    expect(await store.load(), 'abc123def456');
+
+    await store.clear();
+    expect(await store.load(), isNull);
   });
 }

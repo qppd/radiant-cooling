@@ -2,10 +2,10 @@
  * RadiantCoolingMonitor.ino
  *
  * ESP32 GATEWAY - reads 6x DS18B20 temperature sensors, receives ESP-NOW
- * packets from the chiller and dehumidifier boards, receives outdoor
- * weather from the Flutter app via Firebase, and syncs all sensor data to
- * Firebase Realtime Database. Also computes the water chiller pump control
- * (weather + sensors + condensation).
+ * packets from the chiller and dehumidifier boards, fetches outdoor
+ * weather from WeatherAPI.com (API key managed by the Flutter app), and
+ * syncs all sensor data to Firebase Realtime Database. Also computes the
+ * water chiller pump control (weather + sensors + condensation).
  *
  * Firebase is two-way (Mobizt FirebaseClient, async):
  *   - SAVE:    telemetry/state written to radiant/telemetry/* via setJson()
@@ -23,6 +23,7 @@
  *   EspNowTransport     - wraps WiFi + esp_now (register peers, send/receive)
  *   JsonProtocol        - wraps ArduinoJson (ESP-NOW message envelope)
  *   FirebaseSync        - wraps FirebaseClient (set/update + realtime stream)
+ *   WeatherApi          - wraps HTTPClient (WeatherAPI.com; key from the app)
  *   ClimateControl      - dew point + pump decision (control computation)
  *
  * See docs/ for architecture, API and control logic.
@@ -34,6 +35,7 @@
 #include "EspNowTransport.h"
 #include "JsonProtocol.h"
 #include "FirebaseSync.h"
+#include "WeatherApi.h"
 #include "ClimateControl.h"
 
 #include <freertos/FreeRTOS.h>
@@ -45,14 +47,16 @@ TemperatureSensor loopTemps(PIN_ONE_WIRE, TEMP_COUNT);
 WifiProvisioner wifi(WIFI_AP_NAME, PIN_WIFI_RESET_BUTTON);
 EspNowTransport espNow;
 FirebaseSync cloud;
+WeatherApi weather(WEATHER_LOCATION);
 
 // ---- Telemetry state ----
 unsigned long lastPublishMs = 0;
-unsigned long lastWeatherUpdateMs = 0;  // when outdoor weather last arrived from the app
+unsigned long lastWeatherMs = 0;          // last weather fetch attempt (poll throttle)
+unsigned long lastWeatherUpdateMs = 0;    // when a weather fetch last succeeded
 uint32_t seq = 0;
 
 // ---- Control state ----
-bool weatherValid = false;   // outdoor weather received from the app (config/weather stream)
+bool weatherValid = false;   // true while a weather fetch succeeded recently
 ControlInputs inputs;        // latest values from all sources
 ControlParams  params;       // defaults; updated from the config stream
 bool pumpsOn = false;
@@ -157,14 +161,13 @@ void onConfigStream(const char* path, const String& json) {
                   params.comfortSetpointC, params.dewPointMarginC,
                   params.weatherCoolTempC);
   }
-  // /radiant/config/weather (written by the Flutter app) -> outdoor conditions
-  else if (strncmp(path, "/radiant/config/weather", 23) == 0) {
-    inputs.outdoorTempC     = doc["temp_c"]     | -100.0f;
-    inputs.outdoorDewPointC = doc["dewpoint_c"] | -100.0f;
-    weatherValid = true;
-    lastWeatherUpdateMs = millis();
-    Serial.printf("[config] weather: temp=%.1f dewpoint=%.1f\n",
-                  inputs.outdoorTempC, inputs.outdoorDewPointC);
+  // /radiant/config/weather_key (written by the Flutter app) -> API key
+  else if (strncmp(path, "/radiant/config/weather_key", 27) == 0) {
+    const char* key = doc.as<const char*>() | "";
+    if (key[0] != '\0') {
+      weather.setKey(key);
+      Serial.println("[config] weather key updated");
+    }
   }
   // /radiant/config/dh (+ children) -> forward dehumidifier config over ESP-NOW
   else if (strncmp(path, "/radiant/config/dh", 18) == 0) {
@@ -242,14 +245,32 @@ void loop() {
     }
   }
 
-  // Outdoor weather arrives from the Flutter app via the config/weather
-  // stream. When it goes stale (app offline), drop it: weather demand turns
-  // off and the condensation floor falls back to the indoor dew point.
+  // Weather refresh (throttled - see WEATHER_POLL_S). The API key comes
+  // from the Flutter app via the config/weather_key stream (runtime, not
+  // compiled in); without it no fetch is attempted.
+  if (weather.hasKey() && millis() - lastWeatherMs >= WEATHER_POLL_S * 1000UL) {
+    lastWeatherMs = millis();
+    WeatherConditions wx = weather.fetch();
+    if (wx.ok) {
+      inputs.outdoorTempC     = wx.tempC;
+      inputs.outdoorDewPointC = wx.dewPointC;
+      weatherValid = true;
+      lastWeatherUpdateMs = millis();
+      Serial.printf("[weather] ok: temp=%.1f dewpoint=%.1f\n",
+                    inputs.outdoorTempC, inputs.outdoorDewPointC);
+    } else {
+      Serial.println("[weather] fetch failed (key missing or invalid)");
+    }
+  }
+
+  // Drop weather when it goes stale (API unreachable, bad key, or the app
+  // never sent one): weather demand turns off and the condensation floor
+  // falls back to the indoor dew point.
   if (weatherValid && millis() - lastWeatherUpdateMs >= WEATHER_STALE_S * 1000UL) {
     weatherValid = false;
     inputs.outdoorTempC     = -100.0f;
     inputs.outdoorDewPointC = -100.0f;
-    Serial.println("[weather] stale (app offline) - indoor dew point only");
+    Serial.println("[weather] stale - indoor dew point only");
   }
 
   // Control computation (weather + sensors + condensation, see flow-chart.md)
