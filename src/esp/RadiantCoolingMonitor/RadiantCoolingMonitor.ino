@@ -56,9 +56,10 @@ unsigned long lastWeatherUpdateMs = 0;    // when a weather fetch last succeeded
 uint32_t seq = 0;
 
 // ---- Control state ----
-bool weatherValid = false;   // true while a weather fetch succeeded recently
-ControlInputs inputs;        // latest values from all sources
-ControlParams  params;       // defaults; updated from the config stream
+bool weatherValid = false;        // true while a weather fetch succeeded recently
+float outdoorHumidityPct = 0.0f;  // outdoor RH (display only - not used by the control logic)
+ControlInputs inputs;             // latest values from all sources
+ControlParams  params;            // defaults; updated from the config stream
 bool pumpsOn = false;
 
 // ESP-NOW receive -> Firebase write is decoupled via a FreeRTOS queue:
@@ -125,13 +126,14 @@ void handleIncoming(IncomingMessage& msg) {
     }
     // Forward to Firebase: radiant/telemetry/<src>/latest (stamped ts)
     msg.data["ts"] = nowUnix();
-    String path = "/radiant/telemetry/" + msg.src + "/latest";
+    String path = String(RadiantFirebaseConfig::getTelemetryBasePath()) +
+                  "/" + msg.src + "/latest";
     char json[512];
     serializeJson(msg.data, json, sizeof(json));
     cloud.setJson(path.c_str(), json);
   } else if (msg.type == MsgType::State) {
     // Forward to Firebase: radiant/state/<src>
-    String path = "/radiant/state/" + msg.src;
+    String path = String(RadiantFirebaseConfig::getStateBasePath()) + "/" + msg.src;
     char json[256];
     serializeJson(msg.data, json, sizeof(json));
     cloud.setJson(path.c_str(), json);
@@ -150,7 +152,7 @@ void onConfigStream(const char* path, const String& json) {
   if (deserializeJson(doc, json) != DeserializationError::Ok) return;
 
   // /radiant/config/control/params (+ children) -> update chiller control params
-  if (strncmp(path, "/radiant/config/control/params", 30) == 0) {
+  if (String(path).startsWith(RadiantFirebaseConfig::getConfigControlParamsPath())) {
     if (doc["comfort_setpoint_c"].is<float>())
       params.comfortSetpointC = doc["comfort_setpoint_c"];
     if (doc["dewpoint_margin_c"].is<float>())
@@ -162,7 +164,7 @@ void onConfigStream(const char* path, const String& json) {
                   params.weatherCoolTempC);
   }
   // /radiant/config/weather_key (written by the Flutter app) -> API key
-  else if (strncmp(path, "/radiant/config/weather_key", 27) == 0) {
+  else if (String(path).startsWith(RadiantFirebaseConfig::getConfigWeatherKeyPath())) {
     const char* key = doc.as<const char*>() | "";
     if (key[0] != '\0') {
       weather.setKey(key);
@@ -170,7 +172,7 @@ void onConfigStream(const char* path, const String& json) {
     }
   }
   // /radiant/config/dh (+ children) -> forward dehumidifier config over ESP-NOW
-  else if (strncmp(path, "/radiant/config/dh", 18) == 0) {
+  else if (String(path).startsWith(RadiantFirebaseConfig::getConfigDhPath())) {
     JsonDocument payload;
     payload["humidity_setpoint_pct"] = doc["humidity_setpoint_pct"] | 55.0f;
     payload["humidity_deadband_pct"] = doc["humidity_deadband_pct"] | 5.0f;
@@ -209,16 +211,23 @@ void setup() {
 
   // Firebase (async): auth + realtime stream on the config path.
   // The stream auto-starts in cloud.loop() once sign-in completes.
+  // Credentials/URLs come from FirebaseConfig (values in the git-ignored
+  // FirebaseConfig.cpp).
   FirebaseSync::Config fbCfg = {
-    FIREBASE_URL, FIREBASE_API_KEY, FIREBASE_EMAIL, FIREBASE_PASSWORD
+    RadiantFirebaseConfig::getDatabaseURL(),
+    RadiantFirebaseConfig::getApiKey(),
+    RadiantFirebaseConfig::getAuthEmail(),
+    RadiantFirebaseConfig::getAuthPassword(),
   };
   cloud.begin(fbCfg);
-  cloud.stream("/radiant/config", onConfigStream);
+  cloud.stream(RadiantFirebaseConfig::getConfigPath(), onConfigStream);
 }
 
 void loop() {
-  // WiFi reset button: hold ~3 s to erase credentials and restart
+  // WiFi reset button: hold ~3 s to erase credentials and restart.
+  // Also auto-reconnects (rate-limited) after a drop.
   wifi.handleResetButton(WIFI_RESET_HOLD_MS);
+  wifi.reconnectIfLost();
 
   // Firebase async processing (network, auth token, stream heartbeats)
   cloud.loop();
@@ -252,8 +261,9 @@ void loop() {
     lastWeatherMs = millis();
     WeatherConditions wx = weather.fetch();
     if (wx.ok) {
-      inputs.outdoorTempC     = wx.tempC;
-      inputs.outdoorDewPointC = wx.dewPointC;
+      inputs.outdoorTempC      = wx.tempC;
+      inputs.outdoorDewPointC  = wx.dewPointC;
+      outdoorHumidityPct       = wx.humidityPct;
       weatherValid = true;
       lastWeatherUpdateMs = millis();
       Serial.printf("[weather] ok: temp=%.1f dewpoint=%.1f\n",
@@ -268,8 +278,9 @@ void loop() {
   // falls back to the indoor dew point.
   if (weatherValid && millis() - lastWeatherUpdateMs >= WEATHER_STALE_S * 1000UL) {
     weatherValid = false;
-    inputs.outdoorTempC     = -100.0f;
-    inputs.outdoorDewPointC = -100.0f;
+    inputs.outdoorTempC      = -100.0f;
+    inputs.outdoorDewPointC  = -100.0f;
+    outdoorHumidityPct       = -100.0f;
     Serial.println("[weather] stale - indoor dew point only");
   }
 
@@ -294,13 +305,18 @@ void loop() {
     tel["delta_t_c"] = (inputs.returnTempC > kTempValidLoC && inputs.returnTempC < kTempValidHiC &&
                         inputs.supplyTempC > kTempValidLoC && inputs.supplyTempC < kTempValidHiC)
                             ? inputs.returnTempC - inputs.supplyTempC : 0.0f;
+    tel["outdoor_temp_c"]      = inputs.outdoorTempC;
+    tel["outdoor_dewpoint_c"]  = inputs.outdoorDewPointC;
+    tel["outdoor_humidity_pct"] = outdoorHumidityPct;
     tel["dew_point_c"]    = d.refDewPointC;
     tel["water_floor_c"]  = d.waterFloorC;
     tel["pumps"]          = pumpsOn ? "on" : "off";
     tel["ts"]             = nowUnix();
     char json[512];
     serializeJson(tel, json, sizeof(json));
-    cloud.setJson("/radiant/telemetry/monitor/latest", json);
+    cloud.setJson(
+      String(RadiantFirebaseConfig::getTelemetryBasePath()) + "/monitor/latest",
+      json);
 
     // Retained heartbeat (exposes SYSTEM_ID for app linking + Wi-Fi channel)
     JsonDocument hb;
@@ -311,7 +327,7 @@ void loop() {
     hb["ts"]        = nowUnix();
     char hbJson[256];
     serializeJson(hb, hbJson, sizeof(hbJson));
-    cloud.setJson("/radiant/heartbeat/monitor", hbJson);
+    cloud.setJson(RadiantFirebaseConfig::getHeartbeatPath(), hbJson);
 
     // Device registry - the app discovers/links this system via SYSTEM_ID.
     JsonDocument dev;
@@ -322,7 +338,9 @@ void loop() {
     dev["ts"]        = nowUnix();
     char devJson[256];
     serializeJson(dev, devJson, sizeof(devJson));
-    cloud.setJson(String("/radiant/devices/") + SYSTEM_ID, devJson);
+    cloud.setJson(
+      String(RadiantFirebaseConfig::getDevicesBasePath()) + "/" + SYSTEM_ID,
+      devJson);
   }
 
   delay(100);

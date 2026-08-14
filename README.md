@@ -61,7 +61,7 @@ and the gateway is the only device with Wi-Fi.
 - **Dehumidifier** — holds indoor RH at 55% with hysteresis
 - **WiFiManager provisioning** — captive portal on first boot; hold the
   reset button 3 s to re-provision
-- **Flutter Android app** — monitoring and configuration (scaffold in place)
+- **Flutter Android app** — login/signup, live dashboard and settings
 - **Modular firmware** — every component and library encapsulated in its own
   class (sensor, SSR, ESP-NOW, JSON, Firebase, Weather, Climate)
 
@@ -144,7 +144,7 @@ radiant-cooling/
 1. Open each sketch folder in `src/esp/` with Arduino IDE, select the correct
    ESP32 board + COM port, and upload.
 2. Fill in the config headers: on the gateway copy
-   `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` (git-ignored), and
+   `FirebaseConfig.cpp.example` → `FirebaseConfig.cpp` (git-ignored), and
    set the peer/gateway MAC addresses, the `SYSTEM_ID`, and the
    `WEATHER_LOCATION` in `Config.h` for each board. The WeatherAPI key is
    managed from the Flutter app.
@@ -170,6 +170,8 @@ Setup before first run:
    `google-services.json` into `android/app/`, and wire the
    `google-services` Gradle plugin — see
    [`references/flutter-android-firebase.md`](references/flutter-android-firebase.md).
+   Enable **Email/Password** in *Auth → Sign-in method* (the app's login
+   and signup screens use it).
 2. Copy `lib/config/app_config.example.dart` → `lib/config/app_config.dart`
    and fill in the **WeatherAPI.com key** (git-ignored). The app delivers
    the key to the gateway via `radiant/config/weather_key`; the **gateway
@@ -178,17 +180,31 @@ Setup before first run:
    `SYSTEM_ID` from the gateway's `Config.h` (the gateway publishes it in
    `radiant/devices/<SYSTEM_ID>`).
 
-The app currently provides **system linking** and **outdoor weather
-publishing**; the dashboard and control screens are next on the roadmap.
+The app provides:
+
+- **Login / Sign up** (email/password via Firebase Auth)
+- **Device linking on first login** — new accounts (and any signed-in user
+  with no linked system) are routed to a dedicated linking page where the
+  `SYSTEM_ID` from the gateway is entered and validated against the device
+  registry before the dashboard is shown
+- **Dashboard** — live telemetry streamed from Firebase: gateway online
+  status, outdoor weather (fetched by the ESP32), all pipe sensors
+  (supply/return/ΔT/coldest pipe/tank + every DS18B20), pump + dehumidifier
+  state, a live dew-point computation (Magnus formula from the streamed
+  outdoor/indoor temp + humidity), and the gateway's condensation-safety
+  values
+- **Settings** — edit control parameters (comfort setpoint, dew-point
+  margin, weather-cool threshold) and the dehumidifier target, link/change
+  the system, manage the WeatherAPI key, and sign out
 
 ## Firebase Setup
 
 1. Create a Firebase project and enable **Realtime Database**.
-2. Enable **Email/Password** authentication in *Auth → Sign-in method* for
-   the **gateway** (create a dedicated account, e.g.
-   `gateway@radiant-cooling.local`). Enable **Anonymous** too if the app
-   uses anonymous sign-in.
-3. Copy `FIREBASE_CONFIG.example.h` → `FIREBASE_CONFIG.h` in the gateway
+2. Enable **Email/Password** authentication in *Auth → Sign-in method*.
+   Create a dedicated **gateway** account (e.g.
+   `gateway@radiant-cooling.local`) and register a personal account for
+   the app (the app has login and signup screens).
+3. Copy `FirebaseConfig.cpp.example` → `FirebaseConfig.cpp` in the gateway
    folder and paste the database URL, **Web API key**, and (if using
    email/password auth) credentials — the file is git-ignored so secrets
    stay local.
@@ -227,7 +243,8 @@ publishing**; the dashboard and control screens are next on the roadmap.
 
 - [x] ESP-NOW handlers + telemetry (receive queue, cmd/config processing, heartbeat) on all three boards
 - [x] Wire the `onConfigStream` handler (control params + peer forwarding)
-- [ ] Flutter app: Firebase SDK, dashboard, control screens
+- [x] Flutter app: Firebase SDK, dashboard, control screens
+- [x] First-login device linking page
 - [x] Firebase security rules file in `docs/` (`firebase-security-rules.json`)
 - [x] Unit tests for `ClimateControl` (dew point + pump decision, `src/esp/tests/`)
 - [ ] `LICENSE` file

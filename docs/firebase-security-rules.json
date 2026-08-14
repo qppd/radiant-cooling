@@ -5,7 +5,7 @@
         "$device": {
           "$node": {
             ".read": "auth != null",
-            ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'",
+            ".write": "auth != null && auth.token.email == 'quezon.province.pd@gmail.com'",
             ".validate": "newData.hasChildren(['ts']) && newData.child('ts').isNumber()"
           }
         }
@@ -13,7 +13,7 @@
       "state": {
         "$device": {
           ".read": "auth != null",
-          ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'",
+          ".write": "auth != null && auth.token.email == 'quezon.province.pd@gmail.com'",
           ".validate": "(!newData.hasChildren(['pump1']) || newData.child('pump1').val() == 'on' || newData.child('pump1').val() == 'off') && (!newData.hasChildren(['pump2']) || newData.child('pump2').val() == 'on' || newData.child('pump2').val() == 'off') && (!newData.hasChildren(['dehumidifier']) || newData.child('dehumidifier').val() == 'on' || newData.child('dehumidifier').val() == 'off')"
         }
       },
@@ -21,12 +21,14 @@
         ".read": "auth != null",
         "control": {
           ".write": "auth != null",
-          ".validate": "(!newData.hasChildren(['comfort_setpoint_c']) || newData.child('comfort_setpoint_c').isNumber()) && (!newData.hasChildren(['dewpoint_margin_c']) || newData.child('dewpoint_margin_c').isNumber()) && (!newData.hasChildren(['weather_cool_temp_c']) || newData.child('weather_cool_temp_c').isNumber())"
+          "params": {
+            ".validate": "(!newData.hasChildren(['comfort_setpoint_c']) || newData.child('comfort_setpoint_c').isNumber()) && (!newData.hasChildren(['dewpoint_margin_c']) || newData.child('dewpoint_margin_c').isNumber()) && (!newData.hasChildren(['weather_cool_temp_c']) || newData.child('weather_cool_temp_c').isNumber())"
+          }
         },
         "weather_key": {
-          ".read": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'",
+          ".read": "auth != null && auth.token.email == 'quezon.province.pd@gmail.com'",
           ".write": "auth != null",
-          ".validate": "newData.isString() && newData.val().length() > 0 && newData.val().length() <= 64"
+          ".validate": "newData.isString() && newData.val().length > 0 && newData.val().length <= 64"
         },
         "dh": {
           ".write": "auth != null",
@@ -36,13 +38,14 @@
       "heartbeat": {
         "$node": {
           ".read": "auth != null",
-          ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'"
+          ".write": "auth != null && auth.token.email == 'quezon.province.pd@gmail.com'"
         }
       },
       "devices": {
+        ".read": "auth != null",
         "$device": {
           ".read": "auth != null",
-          ".write": "auth != null && auth.token.email == 'gateway@radiant-cooling.local'"
+          ".write": "auth != null && auth.token.email == 'quezon.province.pd@gmail.com'"
         }
       }
     }

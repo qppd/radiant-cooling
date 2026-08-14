@@ -1,0 +1,81 @@
+/*
+ * FirebaseConfig.cpp.example - template for Firebase Realtime Database
+ * credentials (gateway only)
+ *
+ * 1. Copy this file to FirebaseConfig.cpp   (same folder)
+ * 2. Fill in your database URL, Web API key, and auth credentials
+ * 3. Upload the sketch - FirebaseConfig.cpp is git-ignored, so the real
+ *    credentials stay local and are never committed.
+ *
+ * Setup: firebase.google.com -> project -> Realtime Database (get the URL)
+ * and Project settings -> General (Web API key).
+ *
+ * IMPORTANT: use a dedicated EMAIL/PASSWORD account for the gateway and
+ * put that same email in docs/firebase-security-rules.json - the rules
+ * identify the gateway by auth.token.email. Leaving the email empty
+ * (anonymous) means the gateway CANNOT write telemetry/state/heartbeat
+ * under those rules. Enable Email/Password in Authentication -> Sign-in
+ * method.
+ */
+#include "FirebaseConfig.h"
+
+const char* RadiantFirebaseConfig::getFirebaseHost() {
+  // Format: "<project-id>-default-rtdb.firebaseio.com"
+  return "radiant-cooling-default-rtdb.firebaseio.com";
+}
+
+const char* RadiantFirebaseConfig::getDatabaseURL() {
+  // Format: "https://<project-id>-default-rtdb.firebaseio.com/"
+  return "https://radiant-cooling-default-rtdb.firebaseio.com/";
+}
+
+const char* RadiantFirebaseConfig::getApiKey() {
+  // Web API key (Firebase console -> Project settings -> General)
+  return "YOUR_WEB_API_KEY";
+}
+
+const char* RadiantFirebaseConfig::getProjectId() {
+  return "radiant-cooling";
+}
+
+const char* RadiantFirebaseConfig::getAuthEmail() {
+  // Must match the gateway email in docs/firebase-security-rules.json
+  return "gateway@radiant-cooling.local";
+}
+
+const char* RadiantFirebaseConfig::getAuthPassword() {
+  return "YOUR_GATEWAY_PASSWORD";
+}
+
+// ---- Realtime Database path layout (see docs/api.md) ----
+const char* RadiantFirebaseConfig::getConfigPath() {
+  return "/radiant/config";
+}
+
+const char* RadiantFirebaseConfig::getConfigControlParamsPath() {
+  return "/radiant/config/control/params";
+}
+
+const char* RadiantFirebaseConfig::getConfigDhPath() {
+  return "/radiant/config/dh";
+}
+
+const char* RadiantFirebaseConfig::getConfigWeatherKeyPath() {
+  return "/radiant/config/weather_key";
+}
+
+const char* RadiantFirebaseConfig::getTelemetryBasePath() {
+  return "/radiant/telemetry";
+}
+
+const char* RadiantFirebaseConfig::getStateBasePath() {
+  return "/radiant/state";
+}
+
+const char* RadiantFirebaseConfig::getHeartbeatPath() {
+  return "/radiant/heartbeat/monitor";
+}
+
+const char* RadiantFirebaseConfig::getDevicesBasePath() {
+  return "/radiant/devices";
+}

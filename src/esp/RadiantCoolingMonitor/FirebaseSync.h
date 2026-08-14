@@ -3,7 +3,8 @@
  *
  * Wraps the Mobizt FirebaseClient library (async) for Firebase Realtime
  * Database on the gateway board. Works in BOTH directions:
- *   - SAVE:    setJson() / updateJson() - write telemetry/state to Firebase
+ *   - SAVE:    setJson() / updateJson() / removeNode() - write (set),
+ *              partial-update (patch) and delete (remove) nodes
  *   - RECEIVE: stream() - realtime listener on a path (e.g. radiant/config)
  *
  * All operations are non-blocking: writes are queued when ready(), and
@@ -44,8 +45,9 @@ public:
   bool connected() const;                   // app signed in
 
   // --- SAVE (send to Firebase) ---
-  bool setJson(const char* path, const String& json);     // overwrite node
-  bool updateJson(const char* path, const String& json);  // partial update
+  bool setJson(const char* path, const String& json);     // overwrite node (PUT)
+  bool updateJson(const char* path, const String& json);  // partial update (PATCH)
+  bool removeNode(const char* path);                      // delete node (DELETE)
 
   // --- RECEIVE (realtime stream from Firebase) ---
   // Remembers the path/callback; loop() starts the stream when ready.

@@ -59,6 +59,12 @@ bool FirebaseSync::updateJson(const char* path, const String& json) {
   return true;
 }
 
+bool FirebaseSync::removeNode(const char* path) {
+  if (!ready()) return false;
+  _rtdb.remove(_aClient, path);               // delete the node (non-blocking)
+  return true;
+}
+
 bool FirebaseSync::stream(const char* path, StreamCb cb) {
   _streamPath   = path;
   _streamCb     = cb;

@@ -8,7 +8,7 @@
 #pragma once
 #include <Arduino.h>
 #include "PINS_CONFIG.h"
-#include "FIREBASE_CONFIG.h"    // Firebase credentials (git-ignored)
+#include "FirebaseConfig.h"     // Firebase credentials + path layout (real values in FirebaseConfig.cpp, git-ignored)
 
 // ---- Device identity (see docs/api.md) ----
 static const char DEVICE_ID[] = "monitor";     // ESP-NOW sender id (per board)
@@ -23,7 +23,7 @@ static const uint8_t PEER_CHILLER[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 static const uint8_t PEER_DEHUM[]   = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
 // ---- Weather (gateway fetches WeatherAPI itself; key managed by the app) ----
-static const char   WEATHER_LOCATION[] = "your-city";  // WeatherAPI q= location
+static const char   WEATHER_LOCATION[] = "Manila";  // WeatherAPI q= location (verified working)
 static const uint32_t WEATHER_POLL_S   = 900;           // weather refresh interval (s)
 static const uint32_t WEATHER_STALE_S  = 3600;          // outdoor weather older than this is ignored (s)
 

@@ -77,10 +77,17 @@ Desktop.ini
 *.p12
 secrets/
 
+# Firebase service-account keys (never commit a live admin private key)
+references/*firebase-adminsdk*.json
+
+# Firebase web config pasted locally for reference (app reads real values
+# from the git-ignored lib/config/app_config.dart)
+references/firebase-creds.txt
+
 # ===== ESP32 per-sketch credentials =====
 # Keep real API keys local; commit only the .example template.
-src/esp/**/WEATHER_CONFIG.h
-src/esp/**/FIREBASE_CONFIG.h
+# Real Firebase credentials (class-based config; keep the .example)
+src/esp/**/FirebaseConfig.cpp
 !.example.h
 
 # ===== Logs & temporary files =====
@@ -90,3 +97,6 @@ logs/
 *.temp
 *.bak
 *.orig
+
+# App UI screenshots (generated, see test/screenshots_test.dart)
+docs/screenshots/

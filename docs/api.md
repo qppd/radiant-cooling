@@ -89,8 +89,9 @@ radiant/
 ```json
 { "temps_c": [16.2, 16.8, 17.1, 22.4, 23.1, 22.8],
   "supply_c": 16.2, "return_c": 16.8, "coldest_pipe_c": 16.2,
-  "delta_t_c": 0.6, "dew_point_c": 18.0, "water_floor_c": 20.0,
-  "pumps": "on", "ts": 1786119829 }
+  "delta_t_c": 0.6, "outdoor_temp_c": 31.2, "outdoor_dewpoint_c": 24.5,
+  "outdoor_humidity_pct": 66.0, "dew_point_c": 18.0,
+  "water_floor_c": 20.0, "pumps": "on", "ts": 1786119829 }
 ```
 
 `chiller` (1x DS18B20 + pump states):
@@ -219,9 +220,11 @@ firmware.
    is safely above the floor (see `docs/diagrams/flow-chart.md`).
 4. On a decision change, the gateway sends the `set_pumps` command to the
    chiller over ESP-NOW.### Commands (app → plant)
-0. **Linking:** on first run the app asks for the system ID; it validates
-   it against the device registry (`radiant/devices/<SYSTEM_ID>`, written
-   by the gateway) and stores it locally. From then on the app reads only
+0. **Linking:** on first login (new account, or any signed-in user with no
+   linked system) the app shows a dedicated linking page asking for the
+   system ID; it validates it against the device registry
+   (`radiant/devices/<SYSTEM_ID>`, written by the gateway) and stores it
+   locally before the dashboard is shown. From then on the app reads only
    that system's telemetry/state/heartbeat.
 1. App writes `config/<node>` in Firebase.
 2. The gateway **streams** `radiant/config` in real time (FirebaseClient
@@ -266,9 +269,9 @@ paste the file contents into Firebase console → Realtime Database → Rules
   with the account you create), so **anonymous sign-in cannot be used for the
   gateway** with these rules — the writer role would be indistinguishable
   from the app.
-- The **app** authenticates via the Firebase SDK (anonymous or Google sign-in
-  for personal use); any authenticated user may read telemetry/state/config/heartbeat
-  and write `config/**`.
+- The **app** authenticates via the Firebase SDK with **email/password**
+  (login and signup screens in the app); any authenticated user may read
+  telemetry/state/config/heartbeat and write `config/**`.
 - `config/**` is written by the app and read by both the app (dashboard
   display) and the gateway (stream).
 - `config/weather_key` is special-cased: written by the app, readable only

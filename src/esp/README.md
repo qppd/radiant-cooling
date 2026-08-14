@@ -17,13 +17,14 @@ only (wiring + control logic).
 ```
 <BoardName>/
 ├── <BoardName>.ino     # glue: instantiate components, setup()/loop(), control logic
-├── Config.h            # board config (MACs, SYSTEM_ID, constants); includes PINS_CONFIG.h + FIREBASE_CONFIG.h
+├── Config.h            # board config (MACs, SYSTEM_ID, constants); includes PINS_CONFIG.h + FirebaseConfig.h
 ├── PINS_CONFIG.h       # pin assignments - all GPIO wiring for the board
-├── FIREBASE_CONFIG.h   # Firebase credentials (GIT-IGNORED; copy from FIREBASE_CONFIG.example.h) [gateway only]
+├── FirebaseConfig.h    # Firebase class declaration (endpoints + path layout) [gateway only]
+├── FirebaseConfig.cpp  # REAL Firebase credentials (GIT-IGNORED; copy from FirebaseConfig.cpp.example) [gateway only]
 ├── TemperatureSensor.{h,cpp}   # component: DS18B20   (wraps OneWire + DallasTemperature)
 ├── HumiditySensor.{h,cpp}      # component: DHT22     (wraps DHT)
 ├── SsrOutput.{h,cpp}           # component: SSR output (wraps Arduino digital I/O)
-├── WifiProvisioner.{h,cpp}     # wifi:     WiFiManager captive portal (wraps WiFiManager) [gateway only]
+├── WifiProvisioner.{h,cpp}     # wifi:     WiFiManager branded captive portal + auto-reconnect (wraps WiFiManager) [gateway only]
 ├── EspNowTransport.{h,cpp}     # comms:    ESP-NOW    (wraps WiFi + esp_now)
 ├── JsonProtocol.{h,cpp}        # protocol: JSON envelope (wraps ArduinoJson)
 ├── FirebaseSync.{h,cpp}        # cloud:    Firebase RTDB set/update + realtime stream (wraps FirebaseClient) [gateway only]
@@ -90,8 +91,8 @@ Firebase is **two-way** on the gateway (Mobizt `FirebaseClient`, async):
 and `stream()` listens to `radiant/config` in real time. Enable
 **Email/Password** auth in the Firebase console (create a dedicated gateway
 account, e.g. `gateway@radiant-cooling.local`) and put the Web API key +
-credentials in `FIREBASE_CONFIG.h` (`FIREBASE_API_KEY`, `FIREBASE_EMAIL`,
-`FIREBASE_PASSWORD`; copy from `FIREBASE_CONFIG.example.h` — it is
+credentials in `FirebaseConfig.cpp` (`getApiKey()`, `getAuthEmail()`,
+`getAuthPassword()`; copy from `FirebaseConfig.cpp.example` — it is
 git-ignored). Note: `docs/firebase-security-rules.json` identifies the
 gateway by `auth.token.email`, so the gateway must sign in with
 email/password (not anonymous) when those rules are used.
@@ -136,8 +137,8 @@ cd src/esp/tests
 3. Open each board folder as a sketch in Arduino IDE, set the right board
    and COM port, and upload.
 4. Fill in the config headers before flashing: `Config.h` (peer/gateway
-   MACs, `SYSTEM_ID`), `FIREBASE_CONFIG.h` (Firebase URL + Web API key -
-   copy from `FIREBASE_CONFIG.example.h`; it is git-ignored), and check
+   MACs, `SYSTEM_ID`), `FirebaseConfig.cpp` (Firebase URL + Web API key -
+   copy from `FirebaseConfig.cpp.example`; it is git-ignored), and check
    `PINS_CONFIG.h` (pins). WiFi credentials are entered via the captive
    portal on first boot - nothing to fill in. The WeatherAPI key is
    entered in the Flutter app (delivered to the gateway at runtime); the

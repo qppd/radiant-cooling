@@ -1,17 +1,35 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'config/app_config.dart';
+import 'screens/auth_screen.dart';
+import 'screens/dashboard_screen.dart';
+import 'screens/link_device_screen.dart';
+import 'screens/settings_screen.dart';
+import 'services/auth_service.dart';
 import 'services/device_link.dart';
 import 'services/radiant_firebase.dart';
 import 'services/weather_key_store.dart';
 
+/// Firebase options shared by every platform. Explicit options mean the app
+/// works without a per-platform google-services.json — values live in the
+/// git-ignored `AppConfig` (see `app_config.example.dart` for the template).
+FirebaseOptions get _firebaseOptions => const FirebaseOptions(
+      apiKey: AppConfig.firebaseApiKey,
+      appId: AppConfig.firebaseAppId,
+      messagingSenderId: AppConfig.firebaseMessagingSenderId,
+      projectId: AppConfig.firebaseProjectId,
+      authDomain: AppConfig.firebaseAuthDomain,
+      databaseURL: AppConfig.firebaseDatabaseUrl,
+      storageBucket: AppConfig.firebaseStorageBucket,
+    );
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  await Firebase.initializeApp(options: _firebaseOptions);
   runApp(const RadiantCoolingApp());
 }
-
 class RadiantCoolingApp extends StatelessWidget {
   const RadiantCoolingApp({super.key});
 
@@ -23,26 +41,65 @@ class RadiantCoolingApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.cyan),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const AuthGate(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+/// Shows the login/signup screen when signed out, the main shell when in.
+class AuthGate extends StatefulWidget {
+  const AuthGate({super.key});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<AuthGate> createState() => _AuthGateState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _AuthGateState extends State<AuthGate> {
+  late final AuthService _auth;
+
+  @override
+  void initState() {
+    super.initState();
+    _auth = AuthService();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: _auth.authState,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final user = snapshot.data;
+        if (user == null) return AuthScreen(auth: _auth);
+        return HomeShell(auth: _auth);
+      },
+    );
+  }
+}
+
+/// Bottom-navigation shell: Dashboard (live data) and Settings.
+class HomeShell extends StatefulWidget {
+  const HomeShell({super.key, required this.auth});
+
+  final AuthService auth;
+
+  @override
+  State<HomeShell> createState() => _HomeShellState();
+}
+
+class _HomeShellState extends State<HomeShell> {
   final _deviceLink = DeviceLink();
   final _keyStore = WeatherKeyStore();
   late final RadiantFirebase _firebase;
 
   String? _linkedId;
   String? _weatherKey;
-  List<String> _knownSystems = const [];
+  bool _loading = true;
+  int _tabIndex = 0;
 
   @override
   void initState() {
@@ -58,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _linkedId = id;
       _weatherKey = key;
+      _loading = false;
     });
     // The gateway keeps the key in RAM only, so re-deliver it whenever the
     // app starts (e.g. after a gateway reboot).
@@ -98,12 +156,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _linkSystem() async {
-    final discovered = await _firebase.discoverSystems();
+    // Listing the registry is best-effort: a permission/offline failure must
+    // not block manual linking (the text field still works without chips).
+    List<String> discovered = const [];
+    try {
+      discovered = await _firebase.discoverSystems();
+    } catch (_) {}
     if (!mounted) return;
-    setState(() => _knownSystems = discovered);
+    setState(() {});
 
-    final controller =
-        TextEditingController(text: _linkedId ?? AppConfig.defaultSystemId);
+    final controller = TextEditingController(
+      text: _linkedId ?? AppConfig.defaultSystemId,
+    );
     final id = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
@@ -123,12 +187,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 hintText: 'e.g. RADIANT-001',
               ),
             ),
-            if (_knownSystems.isNotEmpty) ...[
+            if (discovered.isNotEmpty) ...[
               const SizedBox(height: 12),
               Wrap(
                 spacing: 6,
                 children: [
-                  for (final id in _knownSystems)
+                  for (final id in discovered)
                     ActionChip(
                       label: Text(id),
                       onPressed: () => controller.text = id,
@@ -156,13 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // Validate against the device registry (written by the gateway) so the
     // user is told if the gateway is offline or the ID is wrong.
     final known = await _firebase.isKnownSystem(id);
-    await _deviceLink.save(id);
-    if (!mounted) return;
-    setState(() => _linkedId = id);
-    // Re-deliver the key now that a system is linked.
-    if (_weatherKey != null && _weatherKey!.isNotEmpty) {
-      await _publishKey(_weatherKey!);
-    }
+    await _linkAndSave(id);
     if (!mounted) return;
     if (!known) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -175,46 +233,77 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  /// Save a linked system ID and re-deliver the WeatherAPI key to the
+  /// gateway (the gateway keeps it in RAM only).
+  Future<void> _linkAndSave(String id) async {
+    await _deviceLink.save(id);
+    if (!mounted) return;
+    setState(() => _linkedId = id);
+    if (_weatherKey != null && _weatherKey!.isNotEmpty) {
+      await _publishKey(_weatherKey!);
+    }
+  }
+
+  /// Called by the first-login [LinkDeviceScreen] after a successful link.
+  void _onLinkedFromScreen(String id) {
+    if (!mounted) return;
+    setState(() => _linkedId = id);
+    if (_weatherKey != null && _weatherKey!.isNotEmpty) {
+      _publishKey(_weatherKey!);
+    }
+  }
+
+  Future<void> _signOut() async {
+    await widget.auth.signOut();
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Signed out')));
+  }
+
   @override
   Widget build(BuildContext context) {
+    // First login / new account: force the device linking page before the
+    // shell so the dashboard has a system to stream.
+    if (_loading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+    if (_linkedId == null) {
+      return LinkDeviceScreen(
+        firebase: _firebase,
+        deviceLink: _deviceLink,
+        onLinked: _onLinkedFromScreen,
+      );
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Radiant Cooling')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
+      body: IndexedStack(
+        index: _tabIndex,
         children: [
-          Card(
-            child: ListTile(
-              leading: Icon(_linkedId == null ? Icons.link_off : Icons.link),
-              title: Text(_linkedId == null ? 'Not linked' : _linkedId!),
-              subtitle: const Text(
-                'System ID connecting this app to the ESP32 gateway '
-                'via Firebase',
-              ),
-              trailing: TextButton(
-                onPressed: _linkSystem,
-                child: Text(_linkedId == null ? 'Link' : 'Change'),
-              ),
-            ),
+          DashboardScreen(firebase: _firebase, linkedId: _linkedId),
+          SettingsScreen(
+            firebase: _firebase,
+            linkedId: _linkedId,
+            weatherKey: _weatherKey,
+            onLinkSystem: _linkSystem,
+            onManageKey: _manageKey,
+            onSignOut: _signOut,
           ),
-          const SizedBox(height: 12),
-          Card(
-            child: ListTile(
-              leading: Icon(
-                _weatherKey == null ? Icons.key_off : Icons.key,
-              ),
-              title: Text(
-                _weatherKey == null ? 'No WeatherAPI key' : 'WeatherAPI key set',
-              ),
-              subtitle: const Text(
-                'Managed from this app and delivered to the gateway '
-                '(radiant/config/weather_key). The ESP32 fetches the '
-                'weather itself.',
-              ),
-              trailing: TextButton(
-                onPressed: _manageKey,
-                child: Text(_weatherKey == null ? 'Set key' : 'Change'),
-              ),
-            ),
+        ],
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _tabIndex,
+        onDestinationSelected: (i) => setState(() => _tabIndex = i),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.dashboard_outlined),
+            selectedIcon: Icon(Icons.dashboard),
+            label: 'Dashboard',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.settings_outlined),
+            selectedIcon: Icon(Icons.settings),
+            label: 'Settings',
           ),
         ],
       ),
@@ -254,9 +343,7 @@ class _KeyDialogState extends State<_KeyDialog> {
               labelText: 'API key',
               hintText: 'e.g. 1a2b3c4d5e6f...',
               suffixIcon: IconButton(
-                icon: Icon(
-                  _obscure ? Icons.visibility : Icons.visibility_off,
-                ),
+                icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
                 onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
@@ -269,7 +356,8 @@ class _KeyDialogState extends State<_KeyDialog> {
           child: const Text('Cancel'),
         ),
         FilledButton(
-          onPressed: () => Navigator.pop(context, widget.controller.text.trim()),
+          onPressed: () =>
+              Navigator.pop(context, widget.controller.text.trim()),
           child: const Text('Save'),
         ),
       ],

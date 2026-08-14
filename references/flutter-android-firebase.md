@@ -16,7 +16,9 @@ flutter run
 
 ## Firebase SDK
 
-- Packages: `firebase_core` (mandatory) + `firebase_database` (RTDB).
+- Packages: `firebase_core` (mandatory) + `firebase_auth` (email/password
+  login) + `firebase_database` (RTDB) + `shared_preferences` (local link +
+  key storage).
 - Android setup: add `google-services.json` and apply the Google Services
   Gradle plugin, plus the `INTERNET` permission in the manifest.
 - The app reads `radiant/telemetry/*`, `radiant/state/*`, and writes
@@ -24,8 +26,16 @@ flutter run
 
 ## How it is used here
 
-- The app UI/dashboard and Firebase wiring are **next on the roadmap** —
-  only the Flutter scaffold exists so far.
+- **Auth:** `AuthGate` in `lib/main.dart` shows a login/signup screen
+  (`lib/screens/auth_screen.dart`) until a user is signed in — the security
+  rules require `auth != null` for every read/write.
+- **Dashboard** (`lib/screens/dashboard_screen.dart`): streams
+  `radiant/telemetry/*`, `radiant/state/*` and `radiant/heartbeat/monitor`
+  via `RadiantFirebase` and renders status/weather/loop/control cards.
+- **Settings** (`lib/screens/settings_screen.dart`): writes control params
+  and the dehumidifier target to `radiant/config/*`, plus system linking,
+  the WeatherAPI key, and sign-out.
+- The path scheme is in `docs/api.md`.
 
 ## Links
 
