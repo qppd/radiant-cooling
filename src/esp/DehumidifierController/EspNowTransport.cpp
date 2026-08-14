@@ -26,10 +26,10 @@ bool EspNowTransport::sendTo(const uint8_t* mac, const uint8_t* data, size_t len
 void EspNowTransport::onReceive(EspNowReceiveCb cb) { _recvHandler = cb; }
 void EspNowTransport::onSend(EspNowSendCb cb)       { _sendHandler = cb; }
 
-void EspNowTransport::_recvCb(const uint8_t* mac, const uint8_t* data, int len) {
-  if (_recvHandler) _recvHandler(mac, data, (size_t)len);
+void EspNowTransport::_recvCb(const esp_now_recv_info_t* info, const uint8_t* data, int len) {
+  if (_recvHandler && info) _recvHandler(info->src_addr, data, (size_t)len);
 }
 
-void EspNowTransport::_sendCb(const uint8_t* mac, esp_now_send_status_t status) {
-  if (_sendHandler) _sendHandler(mac, status == ESP_NOW_SEND_SUCCESS);
+void EspNowTransport::_sendCb(const esp_now_send_info_t* txInfo, esp_now_send_status_t status) {
+  if (_sendHandler && txInfo) _sendHandler(txInfo->des_addr, status == ESP_NOW_SEND_SUCCESS);
 }

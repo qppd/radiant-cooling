@@ -1,5 +1,9 @@
 # Technology Stacks
 
+<p align="center">
+  <img src="../references/images/radiant-cooling-logo.png" width="140" alt="Radiant Cooling logo" />
+</p>
+
 > Languages, frameworks, and tools used across the Radiant Cooling System.
 
 ## Firmware (ESP32 controllers)

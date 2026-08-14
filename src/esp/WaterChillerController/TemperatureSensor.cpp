@@ -16,6 +16,6 @@ void TemperatureSensor::requestTemperatures() {
   _sensors.requestTemperatures();
 }
 
-float TemperatureSensor::readC(uint8_t index) const {
+float TemperatureSensor::readC(uint8_t index) {
   return _sensors.getTempCByIndex(index);
 }

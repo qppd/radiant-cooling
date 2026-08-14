@@ -63,11 +63,15 @@ electrical reference documents.
 
 ## Offline diagram
 
-A rendered copy of the wiring lives in this folder (no Cirkit account
-needed):
+An interactive **3D wiring diagram** lives in this folder (no Cirkit
+account needed):
 
-- **`wiring-diagram.png`** — the diagram as an image (1760×1080)
-- `wiring-diagram.svg` — the editable source (regenerate the PNG from it)
+- **`wiring-diagram.html`** — an interactive **Cirkit-style** flat 2D
+  wiring diagram (Three.js, orthographic top view with dot grid, thin
+  color-coded wires with junction dots). Pan/zoom to explore; hover/click
+  a component to highlight its wires; toggles show/hide power, 1-Wire,
+  GPIO and ESP-NOW groups. Open it in any browser (needs internet for the
+  Three.js CDN).
 
 Pin assignments in the schematic and `PINS_CONFIG.h` are kept in sync;
 update both together when rewiring a board.

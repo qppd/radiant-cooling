@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../config/app_config.dart';
 import '../services/device_link.dart';
 import '../services/radiant_firebase.dart';
+import '../widgets/app_logo.dart';
 
 /// Full-screen device linking shown on first login (new accounts) and for
 /// any signed-in user who has not linked a system yet.
@@ -107,7 +108,7 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Icon(Icons.router, size: 56, color: theme.colorScheme.primary),
+                const Center(child: AppLogo(size: 88)),
                 const SizedBox(height: 12),
                 Text(
                   'Link your Radiant Cooling system',

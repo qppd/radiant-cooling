@@ -165,8 +165,8 @@ void onConfigStream(const char* path, const String& json) {
   }
   // /radiant/config/weather_key (written by the Flutter app) -> API key
   else if (String(path).startsWith(RadiantFirebaseConfig::getConfigWeatherKeyPath())) {
-    const char* key = doc.as<const char*>() | "";
-    if (key[0] != '\0') {
+    const char* key = doc.as<const char*>();
+    if (key != nullptr && key[0] != '\0') {
       weather.setKey(key);
       Serial.println("[config] weather key updated");
     }

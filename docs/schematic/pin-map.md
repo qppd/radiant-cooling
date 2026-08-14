@@ -1,7 +1,8 @@
 # ESP32 Pin Map (38-pin variant)
 
-> Visual diagram: [`wiring-diagram.png`](wiring-diagram.png) (source:
-> `wiring-diagram.svg`) — the pins below are the authoritative values.
+> Interactive 3D diagram: [`wiring-diagram.html`](wiring-diagram.html)
+> (Three.js, top view — hover a component to see its wiring). The pins
+> below are the authoritative values.
 
 > Pin assignments for the three ESP32 boards. All boards run Wi-Fi/ESP-NOW,
 > so every sensor/component pin is selected from the **digital-safe pool**

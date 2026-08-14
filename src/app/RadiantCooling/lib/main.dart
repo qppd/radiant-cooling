@@ -11,6 +11,8 @@ import 'services/auth_service.dart';
 import 'services/device_link.dart';
 import 'services/radiant_firebase.dart';
 import 'services/weather_key_store.dart';
+import 'widgets/app_logo.dart';
+import 'widgets/app_shell.dart';
 
 /// Firebase options shared by every platform. Explicit options mean the app
 /// works without a per-platform google-services.json — values live in the
@@ -69,8 +71,17 @@ class _AuthGateState extends State<AuthGate> {
       stream: _auth.authState,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
+          return Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const AppLogo(size: 112),
+                  const SizedBox(height: 24),
+                  const CircularProgressIndicator(),
+                ],
+              ),
+            ),
           );
         }
         final user = snapshot.data;
@@ -275,38 +286,20 @@ class _HomeShellState extends State<HomeShell> {
         onLinked: _onLinkedFromScreen,
       );
     }
-    return Scaffold(
-      appBar: AppBar(title: const Text('Radiant Cooling')),
-      body: IndexedStack(
-        index: _tabIndex,
-        children: [
-          DashboardScreen(firebase: _firebase, linkedId: _linkedId),
-          SettingsScreen(
-            firebase: _firebase,
-            linkedId: _linkedId,
-            weatherKey: _weatherKey,
-            onLinkSystem: _linkSystem,
-            onManageKey: _manageKey,
-            onSignOut: _signOut,
-          ),
-        ],
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _tabIndex,
-        onDestinationSelected: (i) => setState(() => _tabIndex = i),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Dashboard',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-        ],
-      ),
+    return AppShell(
+      tabIndex: _tabIndex,
+      onTabChanged: (i) => setState(() => _tabIndex = i),
+      children: [
+        DashboardScreen(firebase: _firebase, linkedId: _linkedId),
+        SettingsScreen(
+          firebase: _firebase,
+          linkedId: _linkedId,
+          weatherKey: _weatherKey,
+          onLinkSystem: _linkSystem,
+          onManageKey: _manageKey,
+          onSignOut: _signOut,
+        ),
+      ],
     );
   }
 }

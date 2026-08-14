@@ -70,8 +70,11 @@ if the duplication becomes a burden.
 | `OneWire`           | monitor, chiller|                                                    |
 | `DHT sensor library`| dehumidifier    | DHT22                                             |
 | `ArduinoJson`       | all             | v7 (`JsonDocument`)                               |
-| `FirebaseClient`    | monitor         | Mobizt; the old `Firebase-ESP-Client` is deprecated |
+| `FirebaseClient`    | monitor         | Mobizt; **v2.2.x+** (modern API: SSL client + SSE stream; the old `Firebase-ESP-Client` is deprecated) |
 | `WiFiManager`       | monitor         | tzapu - captive-portal WiFi provisioning            |
+
+**ESP32 core 3.x** (by Espressif) is required — `EspNowTransport` and
+`FirebaseSync` use the core-3.x / FirebaseClient-2.2.x APIs.
 
 ESP-NOW (`esp_now.h`), WiFi, and `HTTPClient` (used by `WeatherApi`) are
 built into the Arduino ESP32 core. The gateway fetches outdoor weather

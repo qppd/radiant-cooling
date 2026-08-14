@@ -18,7 +18,7 @@ public:
   uint8_t count() const;              // expected number of sensors
 
   void requestTemperatures();         // start conversion (async, ~750 ms)
-  float readC(uint8_t index) const;   // -127.0 when the sensor is disconnected
+  float readC(uint8_t index);         // -127.0 when the sensor is disconnected
 
 private:
   OneWire _oneWire;

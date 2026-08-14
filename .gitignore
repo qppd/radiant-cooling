@@ -100,3 +100,6 @@ logs/
 
 # App UI screenshots (generated, see test/screenshots_test.dart)
 docs/screenshots/
+
+# Local arduino-cli toolchain (see docs)
+.arduino/

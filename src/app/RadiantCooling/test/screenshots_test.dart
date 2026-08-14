@@ -20,6 +20,7 @@ import 'package:radiant_cooling/screens/link_device_screen.dart';
 import 'package:radiant_cooling/screens/settings_screen.dart';
 import 'package:radiant_cooling/services/device_link.dart';
 import 'package:radiant_cooling/services/radiant_firebase.dart';
+import 'package:radiant_cooling/widgets/app_shell.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
@@ -52,6 +53,9 @@ void _setPhone(WidgetTester tester) {
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
+  // Let async image decoding (e.g. the AppLogo asset) finish before
+  // capturing, otherwise the logo renders as an empty box.
+  await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 1)));
   await tester.pumpAndSettle();
   // Resolved relative to this test file (src/app/RadiantCooling/test/):
   // ../../../../ = repo root.
@@ -137,7 +141,13 @@ void main() {
     );
     await _pumpApp(
       tester,
-      Scaffold(body: DashboardScreen(firebase: firebase, linkedId: 'RADIANT-001')),
+      AppShell(
+        tabIndex: 0,
+        onTabChanged: (_) {},
+        children: [
+          DashboardScreen(firebase: firebase, linkedId: 'RADIANT-001'),
+        ],
+      ),
     );
     await _capture(tester, 'dashboard');
   }, skip: !_gen);
@@ -150,15 +160,20 @@ void main() {
     );
     await _pumpApp(
       tester,
-      Scaffold(
-        body: SettingsScreen(
-          firebase: firebase,
-          linkedId: 'RADIANT-001',
-          weatherKey: 'set',
-          onLinkSystem: () {},
-          onManageKey: () {},
-          onSignOut: () {},
-        ),
+      AppShell(
+        tabIndex: 1,
+        onTabChanged: (_) {},
+        children: [
+          const SizedBox.shrink(),
+          SettingsScreen(
+            firebase: firebase,
+            linkedId: 'RADIANT-001',
+            weatherKey: 'set',
+            onLinkSystem: () {},
+            onManageKey: () {},
+            onSignOut: () {},
+          ),
+        ],
       ),
     );
     await _capture(tester, 'settings');

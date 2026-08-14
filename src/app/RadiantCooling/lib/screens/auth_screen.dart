@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
+import '../widgets/app_logo.dart';
 
 /// Login / Sign up screen (email/password via Firebase Auth).
 class AuthScreen extends StatefulWidget {
@@ -134,12 +135,8 @@ class _AuthScreenState extends State<AuthScreen> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Icon(
-                            Icons.ac_unit,
-                            size: 56,
-                            color: theme.colorScheme.primary,
-                          ),
-                          const SizedBox(height: 8),
+                          const AppLogo(size: 96),
+                          const SizedBox(height: 12),
                           Text(
                             'Radiant Cooling',
                             textAlign: TextAlign.center,

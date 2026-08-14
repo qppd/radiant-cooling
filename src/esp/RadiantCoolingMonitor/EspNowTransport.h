@@ -23,8 +23,9 @@ public:
   void onSend(EspNowSendCb cb);
 
 private:
-  static void _recvCb(const uint8_t* mac, const uint8_t* data, int len);
-  static void _sendCb(const uint8_t* mac, esp_now_send_status_t status);
+  // ESP32 core 3.x callback signatures (esp_now_recv_info_t / esp_now_send_info_t).
+  static void _recvCb(const esp_now_recv_info_t* info, const uint8_t* data, int len);
+  static void _sendCb(const esp_now_send_info_t* txInfo, esp_now_send_status_t status);
   static EspNowReceiveCb _recvHandler;
   static EspNowSendCb _sendHandler;
 };

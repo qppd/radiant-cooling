@@ -1,5 +1,9 @@
 # Radiant Cooling System
 
+<p align="center">
+  <img src="references/images/radiant-cooling-logo.png" width="160" alt="Radiant Cooling logo" />
+</p>
+
 [![GitHub repo](https://img.shields.io/badge/repo-qppd%2Fradiant--cooling-181717?logo=github&style=flat)](https://github.com/qppd/radiant-cooling)
 [![ESP32](https://img.shields.io/badge/ESP32-WROOM--32-8B9DC3?style=flat)](#hardware)
 [![Arduino IDE](https://img.shields.io/badge/Arduino%20IDE-2.x-00979D?logo=arduino&style=flat)](#firmware)
