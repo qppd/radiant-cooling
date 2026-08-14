@@ -1,7 +1,7 @@
 # Flow Charts
 
-> Control logic flows for the ESP32 firmware. These are initial drafts and
-> should be refined as the firmware implementations develop.
+> Control logic flows for the ESP32 firmware — matches the implemented code
+> in `src/esp/` (the pump decision lives in `ClimateControl.cpp`).
 
 ## 1. Main Control Loops
 

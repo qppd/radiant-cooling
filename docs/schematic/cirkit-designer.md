@@ -61,9 +61,13 @@ flash, UART0 and ADC2 avoidance on the 38-pin ESP32) and
 [`references/README.md`](../../references/README.md) for the list of
 electrical reference documents.
 
-## Status
+## Offline diagram
 
-The project currently contains the three breadboards (one per board) with
-power rails initialized; components are added as the build progresses. Pin
-assignments in the schematic should always match `PINS_CONFIG.h` in each
-sketch folder — update both together.
+A rendered copy of the wiring lives in this folder (no Cirkit account
+needed):
+
+- **`wiring-diagram.png`** — the diagram as an image (1760×1080)
+- `wiring-diagram.svg` — the editable source (regenerate the PNG from it)
+
+Pin assignments in the schematic and `PINS_CONFIG.h` are kept in sync;
+update both together when rewiring a board.

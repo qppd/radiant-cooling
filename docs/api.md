@@ -8,8 +8,8 @@
 > 2. **Firebase Realtime Database** — the cloud store shared by the gateway
 >    board and the Flutter app.
 >
-> **Status: proposed draft** — will evolve as the firmware and app are
-> implemented.
+> **Status: implemented** — matches the firmware in `src/esp/` and the
+> Flutter app in `src/app/`; details evolve with the code.
 
 ## 1. Overview
 
@@ -139,7 +139,7 @@ itself from WeatherAPI.com. The API key is **managed by the Flutter app**
 and delivered to the gateway at runtime — it is never compiled into the
 firmware.
 
-- **Endpoint (gateway):** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>`
+- **Endpoint (gateway):** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>&aqi=no`
 - **Fields used:** `current.temp_c`, `current.humidity`, `current.dewpoint_c`
 - **Key delivery:** the app writes the key to `radiant/config/weather_key`
   (a string); the gateway streams it and keeps it in RAM. A gateway reboot
@@ -161,7 +161,7 @@ firmware.
   gateway's router connection (ESP-NOW and station mode share the channel).
 - Peer MAC addresses are registered on each board (see firmware sketches).
 
-### 4.1 Message envelope (JSON, ≤ 250 B)
+### 5.1 Message envelope (JSON, ≤ 250 B)
 
 ```json
 { "v": 1, "t": "telemetry", "src": "chiller", "seq": 42,
@@ -180,7 +180,7 @@ firmware.
 > payload plus ArduinoJson overhead approaches the 250 B limit. If payloads
 > grow, fall back to a packed binary struct (`__attribute__((packed))`).
 
-### 4.2 Message types
+### 5.2 Message types
 
 | Type        | Direction                | Payload example                                      |
 | ----------- | ------------------------ | ---------------------------------------------------- |
@@ -190,7 +190,7 @@ firmware.
 | `config`    | gateway → peer           | `{ "comfort_setpoint_c": 24.0, "dewpoint_margin_c": 2.0 }` |
 | `status`    | both                     | `{ "online": true, "firmware": "0.1.0" }`            |
 
-### 4.3 Supported commands (`cmd`)
+### 5.3 Supported commands (`cmd`)
 
 | Command                | Target  | Value           |
 | ---------------------- | ------- | --------------- |
@@ -235,15 +235,19 @@ firmware.
 
 ## 7. Reliability & error handling
 
-- **QoS:** ESP-NOW is best-effort; peers resend `telemetry`/`state` on the
-  next cycle if `seq` gaps are detected by the gateway.
+- **QoS:** ESP-NOW is best-effort with no ACK/retry in the firmware.
+  Peers publish fresh `telemetry`/`state` on a fixed cycle, and the gateway
+  forwards the latest snapshot to Firebase — a lost packet is simply
+  overwritten by the next cycle. The `seq` field exists for future gap
+  detection/deduplication.
 - **Retained state:** Firebase stores the latest state, so the app always
   shows the last known values.
 - **Heartbeat:** the gateway writes `heartbeat/monitor` with `online` and
   `ts`; the app can show connectivity from this path.
-- **Peer presence:** peers never touch Firebase directly — the app infers
-  their online status from the `ts` of the latest `telemetry/<peer>/latest`
-  write.
+- **Peer presence:** peers never touch Firebase directly — their online
+  status can be inferred from the freshness of `telemetry/<peer>/latest`.
+  The app currently surfaces the gateway heartbeat; peer data appears on
+  the dashboard as soon as a peer reports.
 - **Unknown commands** are ignored and logged on the peer.
 
 ## 8. Firebase security rules & auth
