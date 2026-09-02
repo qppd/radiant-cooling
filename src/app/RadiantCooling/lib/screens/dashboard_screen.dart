@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/telemetry.dart';
 import '../services/dew_point.dart';
 import '../services/radiant_firebase.dart';
+import '../widgets/device_status_strip.dart';
 import '../widgets/section_card.dart';
 
 /// Live dashboard: system status, weather, cooling loop, control, and
@@ -14,10 +15,14 @@ class DashboardScreen extends StatelessWidget {
     super.key,
     required this.firebase,
     required this.linkedId,
+    this.onRefresh,
   });
 
   final RadiantFirebase firebase;
   final String? linkedId;
+
+  /// Called when the user pulls to refresh. If null, no refresh is triggered.
+  final VoidCallback? onRefresh;
 
   String _fmt(double? v, {int digits = 1}) =>
       v == null || v <= -90 ? '—' : '${v.toStringAsFixed(digits)} °C';
@@ -35,9 +40,20 @@ class DashboardScreen extends StatelessWidget {
     if (linkedId == null) {
       return const _NotLinkedView();
     }
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: onRefresh != null
+          ? () async {
+              onRefresh!();
+              // Brief pause so the spinner is visible while streams deliver
+              // the latest data.
+              await Future<void>.delayed(const Duration(milliseconds: 500));
+            }
+          : () async {},
+      child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        DeviceStatusStrip(firebase: firebase),
+        const SizedBox(height: 12),
         _StatusCard(
           stream: firebase.heartbeatStream(),
           linkedId: linkedId!,
@@ -286,6 +302,7 @@ class DashboardScreen extends StatelessWidget {
           },
         ),
       ],
+    ),
     );
   }
 }

@@ -9,8 +9,8 @@ only (wiring + control logic).
 | Folder                     | Hardware                                                     | Role     |
 | -------------------------- | ------------------------------------------------------------ | -------- |
 | `RadiantCoolingMonitor/`   | 6x DS18B20 (1-Wire): supply/return + 4 pipe temps              | Gateway  |
-| `WaterChillerController/`  | 1x DS18B20, 2x SSR -> 2 water pumps                          | Peer     |
-| `DehumidifierController/`  | 1x DHT22, 1x SSR -> dehumidifier                             | Peer     |
+| `WaterChillerController/`  | 3x DS18B20 adapter, compressor SSR, 2-channel pump relay     | Peer     |
+| `DehumidifierController/`  | DHT22 (GPIO25), 1x SSR (GPIO23) -> dehumidifier          | Peer     |
 
 ## Module layout (same pattern in every sketch folder)
 

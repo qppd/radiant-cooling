@@ -1,9 +1,13 @@
 import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:radiant_cooling/models/alert.dart';
 import 'package:radiant_cooling/models/telemetry.dart';
+import 'package:radiant_cooling/services/alert_service.dart';
 import 'package:radiant_cooling/services/auth_service.dart';
+import 'package:radiant_cooling/services/notification_service.dart';
 import 'package:radiant_cooling/services/radiant_firebase.dart';
+import 'package:radiant_cooling/services/telemetry_logger.dart';
 
 /// Test double for [AuthService]: records calls and can throw on demand.
 /// Built on the lazy-injection seam, so no Firebase plugin is touched.
@@ -145,4 +149,62 @@ class FakeRadiantFirebase extends RadiantFirebase {
       humidityDeadbandPct: humidityDeadbandPct ?? 5,
     );
   }
+}
+
+/// Fake [TelemetryLogger] that stores points in memory.
+class FakeTelemetryLogger extends TelemetryLogger {
+  FakeTelemetryLogger() : super();
+
+  final List<TelemetryPoint> _points = [];
+
+  @override
+  Future<List<TelemetryPoint>> load() async => List.unmodifiable(_points);
+
+  @override
+  Future<void> log(TelemetryPoint point) async {
+    _points.add(point);
+  }
+
+  @override
+  Future<List<TelemetryPoint>> loadWindow(Duration window) async {
+    final cutoff = DateTime.now().subtract(window);
+    return [
+      for (final p in _points)
+        if (!p.timestamp.isBefore(cutoff)) p,
+    ];
+  }
+
+  @override
+  Future<void> clear() async => _points.clear();
+}
+
+/// Fake [AlertService] that stores alerts in memory.
+class FakeAlertService extends AlertService {
+  FakeAlertService() : super();
+
+  final List<Alert> _alerts = [];
+
+  @override
+  Future<List<Alert>> load() async => List.unmodifiable(_alerts);
+
+  @override
+  Future<void> addAlert(Alert alert) async {
+    _alerts.insert(0, alert);
+  }
+
+  @override
+  Future<void> clear() async => _alerts.clear();
+}
+
+/// Fake [NotificationService] backed by in-memory prefs.
+class FakeNotificationService extends NotificationService {
+  FakeNotificationService() : super();
+
+  NotificationPrefs _prefs = const NotificationPrefs();
+
+  @override
+  Future<NotificationPrefs> load() async => _prefs;
+
+  @override
+  Future<void> save(NotificationPrefs prefs) async => _prefs = prefs;
 }

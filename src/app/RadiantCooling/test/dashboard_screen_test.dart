@@ -84,7 +84,7 @@ void main() {
     // Control section: pump 1 + dehumidifier ON, pump 2 OFF.
     expect(find.text('Chiller pump 1'), findsOneWidget);
     expect(find.text('Chiller pump 2'), findsOneWidget);
-    expect(find.text('Dehumidifier'), findsOneWidget);
+    expect(find.text('Dehumidifier'), findsWidgets); // strip + control
     expect(find.text('ON'), findsNWidgets(2));
     expect(find.text('OFF'), findsOneWidget);
 

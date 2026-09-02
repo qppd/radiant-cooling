@@ -16,5 +16,4 @@ static const char DEVICE_ID[] = "chiller";
 static const uint8_t GATEWAY_MAC[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
 
 // ---- Fixed constants ----
-static const uint8_t TEMP_COUNT   = 1;     // number of DS18B20 sensors
 static const uint8_t TELEMETRY_S  = 30;    // telemetry send interval (s)

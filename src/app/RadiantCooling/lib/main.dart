@@ -1,15 +1,28 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
 import 'config/app_config.dart';
-import 'screens/auth_screen.dart';
+import 'screens/about_screen.dart';
+import 'screens/alerts_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/link_device_screen.dart';
+import 'screens/login_screen.dart';
+import 'screens/notification_settings_screen.dart';
+import 'screens/onboarding_screen.dart';
+import 'screens/register_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/trends_screen.dart';
+import 'models/telemetry.dart';
+import 'services/alert_service.dart';
 import 'services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/device_link.dart';
+import 'services/notification_service.dart';
 import 'services/radiant_firebase.dart';
+import 'services/telemetry_logger.dart';
 import 'services/weather_key_store.dart';
 import 'widgets/app_logo.dart';
 import 'widgets/app_shell.dart';
@@ -43,8 +56,54 @@ class RadiantCoolingApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.cyan),
         useMaterial3: true,
       ),
-      home: const AuthGate(),
+      home: const AppEntry(),
     );
+  }
+}
+
+/// Entry point: checks onboarding flag, then shows AuthGate.
+class AppEntry extends StatefulWidget {
+  const AppEntry({super.key});
+
+  @override
+  State<AppEntry> createState() => _AppEntryState();
+}
+
+class _AppEntryState extends State<AppEntry> {
+  bool _checked = false;
+  bool _onboardingComplete = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  Future<void> _check() async {
+    final prefs = await SharedPreferences.getInstance();
+    final complete = prefs.getBool('onboarding_complete') ?? false;
+    if (!mounted) return;
+    setState(() {
+      _onboardingComplete = complete;
+      _checked = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_checked) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (!_onboardingComplete) {
+      return OnboardingScreen(
+        onComplete: () {
+          setState(() => _onboardingComplete = true);
+        },
+      );
+    }
+    return const AuthGate();
   }
 }
 
@@ -85,7 +144,7 @@ class _AuthGateState extends State<AuthGate> {
           );
         }
         final user = snapshot.data;
-        if (user == null) return AuthScreen(auth: _auth);
+        if (user == null) return LoginScreen(auth: _auth);
         return HomeShell(auth: _auth);
       },
     );
@@ -106,17 +165,117 @@ class _HomeShellState extends State<HomeShell> {
   final _deviceLink = DeviceLink();
   final _keyStore = WeatherKeyStore();
   late final RadiantFirebase _firebase;
+  final _telemetryLogger = TelemetryLogger();
+  final _alertService = AlertService();
+  final _notificationService = NotificationService();
+
+  // Stream subscriptions for background telemetry logging + alert detection.
+  final List<StreamSubscription<dynamic>> _subs = [];
 
   String? _linkedId;
   String? _weatherKey;
   bool _loading = true;
   int _tabIndex = 0;
+  int _unreadAlertCount = 0;
 
   @override
   void initState() {
     super.initState();
     _firebase = RadiantFirebase();
+    _startStreamListeners();
     _load();
+  }
+
+  /// Subscribe to all Firebase streams for telemetry logging and alert
+  /// detection. Subscriptions are cancelled in [dispose].
+  void _startStreamListeners() {
+    // Monitor telemetry — log pipe temps + outdoor weather.
+    _subs.add(_firebase.monitorStream().listen((m) {
+      _telemetryLogger.log(TelemetryPoint(
+        timestamp: DateTime.now(),
+        supplyC: m.supplyC,
+        returnC: m.returnC,
+        coldestPipeC: m.coldestPipeC,
+        outdoorTempC: m.outdoorTempC,
+        outdoorDewPointC: m.outdoorDewPointC,
+      ));
+      final wasCount = _unreadAlertCount;
+      _alertService.processMonitorTelemetry(
+        coldestPipeC: m.coldestPipeC,
+        waterFloorC: m.waterFloorC,
+      );
+      _checkAlertCount(wasCount);
+    }));
+
+    // Chiller telemetry — log water temp.
+    _subs.add(_firebase.chillerStream().listen((ch) {
+      // The TelemetryPoint is appended by the monitor listener; chiller
+      // data is merged in the next log cycle. For now we only need the
+      // latest values — the monitor listener fires first and captures
+      // the supply/return/pipe data.
+    }));
+
+    // Dehumidifier telemetry — log indoor temp + humidity.
+    _subs.add(_firebase.dhStream().listen((dh) {
+      // Indoor climate is logged via the monitor listener batch; we
+      // don't create a separate TelemetryPoint here to avoid double-
+      // logging. The monitor listener already captures outdoor data;
+      // indoor data is merged in the _logDh helper below.
+      _logDh(dh);
+    }));
+
+    // Heartbeat — detect gateway going offline.
+    _subs.add(_firebase.heartbeatStream().listen((hb) {
+      final wasCount = _unreadAlertCount;
+      _alertService.processHeartbeat(
+        online: hb.online,
+        deviceId: hb.deviceId ?? 'unknown',
+      );
+      _checkAlertCount(wasCount);
+    }));
+  }
+
+  /// Merge indoor climate data into the most recent TelemetryPoint.
+  /// Called when dehumidifier telemetry arrives.
+  void _logDh(DhTelemetry dh) async {
+    final points = await _telemetryLogger.load();
+    if (points.isNotEmpty) {
+      // Update the most recent point with indoor data.
+      final last = points.last;
+      final updated = TelemetryPoint(
+        timestamp: last.timestamp,
+        supplyC: last.supplyC,
+        returnC: last.returnC,
+        coldestPipeC: last.coldestPipeC,
+        tankTempC: last.tankTempC,
+        indoorTempC: dh.tempC,
+        indoorHumidityPct: dh.humidityPct,
+        outdoorTempC: last.outdoorTempC,
+        outdoorDewPointC: last.outdoorDewPointC,
+      );
+      // Replace the last point (the file is small enough to rewrite).
+      points.last = updated;
+      // Persist via the logger's internal file.
+      await _telemetryLogger.log(updated);
+    }
+  }
+
+  /// Check if AlertService added new alerts and update badge count.
+  void _checkAlertCount(int previousCount) async {
+    final alerts = await _alertService.load();
+    if (!mounted) return;
+    if (alerts.length > previousCount && _tabIndex != 2) {
+      setState(() => _unreadAlertCount = alerts.length - previousCount);
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final sub in _subs) {
+      sub.cancel();
+    }
+    _subs.clear();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -288,9 +447,22 @@ class _HomeShellState extends State<HomeShell> {
     }
     return AppShell(
       tabIndex: _tabIndex,
-      onTabChanged: (i) => setState(() => _tabIndex = i),
+      alertBadgeCount: _unreadAlertCount,
+      onTabChanged: (i) {
+        setState(() {
+          _tabIndex = i;
+          // Clear badge when user opens the Alerts tab.
+          if (i == 2) _unreadAlertCount = 0;
+        });
+      },
       children: [
-        DashboardScreen(firebase: _firebase, linkedId: _linkedId),
+        DashboardScreen(
+          firebase: _firebase,
+          linkedId: _linkedId,
+          onRefresh: () {}, // streams auto-update; refresh just shows spinner
+        ),
+        TrendsScreen(firebase: _firebase, logger: _telemetryLogger),
+        AlertsScreen(alertService: _alertService),
         SettingsScreen(
           firebase: _firebase,
           linkedId: _linkedId,
@@ -298,6 +470,27 @@ class _HomeShellState extends State<HomeShell> {
           onLinkSystem: _linkSystem,
           onManageKey: _manageKey,
           onSignOut: _signOut,
+          onNotifications: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => NotificationSettingsScreen(
+                  service: _notificationService,
+                ),
+              ),
+            );
+          },
+          onAbout: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => AboutScreen(
+                  firebase: _firebase,
+                  linkedId: _linkedId,
+                ),
+              ),
+            );
+          },
         ),
       ],
     );

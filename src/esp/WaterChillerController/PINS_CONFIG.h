@@ -16,6 +16,12 @@
 #include <Arduino.h>
 
 // ---- Pin map ----
-static const uint8_t PIN_SSR_PUMP1 = 19;   // SSR -> water pump 1
-static const uint8_t PIN_SSR_PUMP2 = 21;   // SSR -> water pump 2
-static const uint8_t PIN_ONE_WIRE  = 22;   // 1-Wire bus (1x DS18B20) + 4.7k pull-up to 3V3
+static const uint8_t PIN_SSR_COMPRESSOR = 18; // SSR -> compressor
+static const uint8_t PIN_RELAY_PUMP1    = 21; // 2-channel relay IN1 -> water-in pump
+static const uint8_t PIN_RELAY_PUMP2    = 22; // 2-channel relay IN2 -> water-out pump
+
+// Each 3-wire DS18B20 adapter has its own 1-Wire bus (DAT/GND/VCC).
+// Confirm whether the adapter already includes the 4.7k pull-up to 3V3.
+static const uint8_t PIN_TEMP_OUTGOING = 32; // outgoing water temperature
+static const uint8_t PIN_TEMP_INGOING  = 23; // ingoing water temperature
+static const uint8_t PIN_TEMP_TANK     = 19; // water-chiller tank temperature

@@ -15,6 +15,8 @@ class SettingsScreen extends StatelessWidget {
     required this.onLinkSystem,
     required this.onManageKey,
     required this.onSignOut,
+    required this.onNotifications,
+    required this.onAbout,
   });
 
   final RadiantFirebase firebase;
@@ -23,6 +25,8 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback onLinkSystem;
   final VoidCallback onManageKey;
   final VoidCallback onSignOut;
+  final VoidCallback onNotifications;
+  final VoidCallback onAbout;
 
   Future<void> _editControlParams(BuildContext context) async {
     final current = await firebase.controlParamsStream().first;
@@ -235,11 +239,40 @@ class SettingsScreen extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 20),
-        OutlinedButton.icon(
-          onPressed: onSignOut,
-          icon: const Icon(Icons.logout),
-          label: const Text('Sign out'),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Notifications'),
+            subtitle: const Text('Alert notification preferences'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onNotifications,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: ListTile(
+            leading: const Icon(Icons.info_outline),
+            title: const Text('About'),
+            subtitle: const Text('v1.0.0 · Radiant Cooling'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: onAbout,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SectionCard(
+          title: 'Account',
+          icon: Icons.person_outline,
+          child: Column(
+            children: [
+              const SizedBox(height: 4),
+              OutlinedButton.icon(
+                onPressed: onSignOut,
+                icon: const Icon(Icons.logout),
+                label: const Text('Sign out'),
+              ),
+            ],
+          ),
         ),
       ],
     );

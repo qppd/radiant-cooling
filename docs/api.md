@@ -94,10 +94,12 @@ radiant/
   "water_floor_c": 20.0, "pumps": "on", "ts": 1786119829 }
 ```
 
-`chiller` (1x DS18B20 + pump states):
+`chiller` (three DS18B20 adapters + compressor and pump states):
 
 ```json
-{ "water_temp_c": 16.2, "pump1": "on", "pump2": "off", "ts": 1786119829 }
+{ "outgoing_temp_c": 16.2, "ingoing_temp_c": 16.8, "tank_temp_c": 17.1,
+  "water_temp_c": 17.1, "compressor": "on", "pump1": "on", "pump2": "off",
+  "ts": 1786119829 }
 ```
 
 `dh` (DHT22):

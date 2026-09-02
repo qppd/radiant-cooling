@@ -29,6 +29,8 @@ void main() {
             onLinkSystem: onLinkSystem ?? () {},
             onManageKey: onManageKey ?? () {},
             onSignOut: onSignOut ?? () {},
+            onNotifications: () {},
+            onAbout: () {},
           ),
         ),
       ),

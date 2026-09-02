@@ -24,6 +24,8 @@ float h = dht.readHumidity();      // %RH
 ## How it is used here
 
 - `HumiditySensor` module wraps the DHT library (dehumidifier board only).
+- Wiring: DHT22 `DATA` to GPIO25, `VCC` to ESP32 `3V3`, and `GND` to ESP32
+  `GND`. Keep the DHT22, ESP32, and SSR input on the same common ground.
 - The 55 %RH setpoint control reads this sensor directly; the reading is also
   sent to the gateway over ESP-NOW for the dew-point computation.
 

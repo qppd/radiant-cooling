@@ -34,19 +34,27 @@ I/O with Wi-Fi and ESP-NOW running.
 | ----------------------- | --- | ---------------------------------- | ---------------------------- |
 | `RadiantCoolingMonitor` | 18  | 1-Wire bus (6x DS18B20)            | 4.7kΩ pull-up to 3V3         |
 | `RadiantCoolingMonitor` | 33  | WiFi reset button                   | momentary switch to GND, INPUT_PULLUP; hold 3 s to erase WiFi credentials |
-| `WaterChillerController`| 19  | SSR → water pump 1                 | SSR input (see wiring note)  |
-| `WaterChillerController`| 21  | SSR → water pump 2                 | SSR input (see wiring note)  |
-| `WaterChillerController`| 22  | 1-Wire bus (1x DS18B20)            | 4.7kΩ pull-up to 3V3         |
+| `WaterChillerController`| 18  | SSR → compressor                   | SSR input (see wiring note)  |
+| `WaterChillerController`| 19  | DS18B20 adapter → tank temperature | DAT; check adapter pull-up   |
+| `WaterChillerController`| 21  | 2-channel relay IN1 → water-in pump | Relay input (see wiring note) |
+| `WaterChillerController`| 22  | 2-channel relay IN2 → water-out pump | Relay input (see wiring note) |
+| `WaterChillerController`| 23  | DS18B20 adapter → ingoing water    | DAT; check adapter pull-up   |
+| `WaterChillerController`| 32  | DS18B20 adapter → outgoing water   | DAT; check adapter pull-up   |
 | `DehumidifierController`| 23  | SSR → dehumidifier                 | SSR input (see wiring note)  |
-| `DehumidifierController`| 32  | DHT22 data                         | 10kΩ pull-up to 3V3          |
+| `DehumidifierController`| 25  | DHT22 data                         | 10kΩ pull-up to 3V3          |
 | (spare)                 | 19, 21, 22, 23, 32    | —                         | free on the gateway board   |
 
 ## Wiring notes
 
-- **1-Wire (DS18B20):** a single data pin handles all sensors in parallel —
-  add a **4.7 kΩ pull-up** from the data line to 3V3. Use parasite power only
-  if necessary (prefer external 3V3 supply).
+- **DS18B20 adapter modules:** connect each module's `DAT` to its assigned
+  GPIO, `GND` to ESP32 `GND`, and `VCC` to `3V3`. These sensors use separate
+  1-Wire buses in this controller. Check the module: many adapters already
+  include the required **4.7 kΩ pull-up** from `DAT` to `VCC`; add one only
+  if it is absent. Do not connect adapter `VCC` to an ESP32 GPIO.
 - **DHT22:** data pin needs a **10 kΩ pull-up** to 3V3.
+- **Dehumidifier board power:** connect the regulated **5 V, 3 A** supply to
+  ESP32 `VIN` and `GND`. Connect DHT22 `VCC` to `3V3`, DHT22 `GND` to ESP32
+  `GND`, and the SSR input ground to the same common low-voltage `GND`.
 - **SSR modules:** most SSR modules have an input that can be driven directly
   from a 3.3V GPIO (3-32V DC input). Confirm the module's input spec; if it
   needs more drive, buffer with a transistor/MOSFET.

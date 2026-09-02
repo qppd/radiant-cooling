@@ -14,7 +14,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:radiant_cooling/models/telemetry.dart';
-import 'package:radiant_cooling/screens/auth_screen.dart';
+import 'package:radiant_cooling/screens/login_screen.dart';
+import 'package:radiant_cooling/screens/register_screen.dart';
 import 'package:radiant_cooling/screens/dashboard_screen.dart';
 import 'package:radiant_cooling/screens/link_device_screen.dart';
 import 'package:radiant_cooling/screens/settings_screen.dart';
@@ -75,23 +76,15 @@ Future<void> _pumpApp(WidgetTester tester, Widget home) async {
 void main() {
   setUpAll(_loadRealFonts);
 
-  testWidgets('screenshots: auth login', (tester) async {
+  testWidgets('screenshots: login', (tester) async {
     _setPhone(tester);
-    await _pumpApp(tester, AuthScreen(auth: FakeAuthService()));
+    await _pumpApp(tester, LoginScreen(auth: FakeAuthService()));
     await _capture(tester, 'auth_login');
   }, skip: !_gen);
 
-  testWidgets('screenshots: auth sign-up', (tester) async {
+  testWidgets('screenshots: register', (tester) async {
     _setPhone(tester);
-    final auth = FakeAuthService();
-    await _pumpApp(tester, AuthScreen(auth: auth));
-    await tester.tap(
-      find.descendant(
-        of: find.byType(SegmentedButton<bool>),
-        matching: find.text('Sign up'),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await _pumpApp(tester, RegisterScreen(auth: FakeAuthService()));
     await _capture(tester, 'auth_signup');
   }, skip: !_gen);
 
@@ -172,6 +165,8 @@ void main() {
             onLinkSystem: () {},
             onManageKey: () {},
             onSignOut: () {},
+            onNotifications: () {},
+            onAbout: () {},
           ),
         ],
       ),

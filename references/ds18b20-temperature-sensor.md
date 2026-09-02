@@ -1,5 +1,12 @@
 # DS18B20 Temperature Sensor (1-Wire)
 
+For the 3-wire adapter modules, connect `DAT`, `GND`, and `VCC` as follows:
+
+- `DAT` goes to the assigned ESP32 GPIO.
+- `GND` goes to ESP32 `GND`.
+- `VCC` goes to regulated `3V3`.
+- Check whether the adapter includes the required 4.7 kΩ pull-up resistor.
+
 > Digital temperature sensor used on the gateway (6×) and the chiller board
 > (1×). All sensors share a single GPIO via the 1-Wire bus.
 
@@ -31,8 +38,9 @@ float t = sensors.getTempCByIndex(0);   // read sensor 0 after ~750 ms
 
 ## How it is used here
 
-- `TemperatureSensor` module wraps the pair — the gateway constructs it with
-  `count = 6`, the chiller with `count = 1` (same 1-Wire pin wiring).
+- `TemperatureSensor` module wraps each bus. The gateway uses one bus for six
+  sensors; the chiller uses three separate buses: outgoing water on GPIO 32,
+  ingoing water on GPIO 23, and the water-chiller tank on GPIO 19.
 - Room temperatures feed the pump-control computation (`ClimateControl`).
 
 ## Links

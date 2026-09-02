@@ -1,8 +1,8 @@
 /*
  * WaterChillerController.ino
  *
- * ESP32 ESP-NOW PEER - reads water temperature (1x DS18B20) and switches
- * the two water pumps (SSR) on COMMAND from the gateway.
+ * ESP32 ESP-NOW PEER - reads three water temperatures and switches the
+ * compressor SSR and two pump relay channels on command from the gateway.
  *
  * The pump on/off decision is computed on the gateway (RadiantCoolingMonitor)
  * from the outdoor dew point (fetched by the Flutter app) + all sensor
@@ -12,9 +12,9 @@
  *
  * This file is glue only. All component/library code is encapsulated:
  *   Config.h            - board configuration (MACs, constants); includes PINS_CONFIG.h
- *   PINS_CONFIG.h       - pin assignments (SSRs, 1-Wire)
- *   TemperatureSensor   - wraps OneWire + DallasTemperature (1x DS18B20)
- *   SsrOutput           - wraps one SSR digital output (pump 1, pump 2)
+ *   PINS_CONFIG.h       - pin assignments (compressor, pumps, sensors)
+ *   TemperatureSensor   - wraps OneWire + DallasTemperature (1x DS18B20/bus)
+ *   SsrOutput           - wraps the compressor SSR and relay digital outputs
  *   EspNowTransport     - wraps WiFi + esp_now (register gateway, send/receive)
  *   JsonProtocol        - wraps ArduinoJson (ESP-NOW message envelope)
  *
@@ -31,9 +31,12 @@
 #include <freertos/queue.h>
 
 // ---- Components ----
-TemperatureSensor waterTemp(PIN_ONE_WIRE, TEMP_COUNT);
-SsrOutput pump1(PIN_SSR_PUMP1);
-SsrOutput pump2(PIN_SSR_PUMP2);
+TemperatureSensor outgoingTemp(PIN_TEMP_OUTGOING, 1);
+TemperatureSensor ingoingTemp(PIN_TEMP_INGOING, 1);
+TemperatureSensor tankTemp(PIN_TEMP_TANK, 1);
+SsrOutput compressor(PIN_SSR_COMPRESSOR);
+SsrOutput pump1(PIN_RELAY_PUMP1);
+SsrOutput pump2(PIN_RELAY_PUMP2);
 EspNowTransport espNow;
 
 // ---- Telemetry state ----
@@ -70,10 +73,12 @@ void sendStatus() {
 
 // Execute the gateway's pump command.
 void setPumps(bool on) {
-  if (pump1.isOn() == on && pump2.isOn() == on) return;   // no change
+  if (compressor.isOn() == on && pump1.isOn() == on && pump2.isOn() == on) return;
+  compressor.set(on);
   pump1.set(on);
   pump2.set(on);
   JsonDocument payload;
+  payload["compressor"] = on ? "on" : "off";
   payload["pump1"] = on ? "on" : "off";
   payload["pump2"] = on ? "on" : "off";
   sendMsg(MsgType::State, payload);
@@ -117,7 +122,10 @@ void setup() {
 
   espNowQueue = xQueueCreate(8, sizeof(EspNowRxPacket));
 
-  waterTemp.begin();
+  outgoingTemp.begin();
+  ingoingTemp.begin();
+  tankTemp.begin();
+  compressor.begin();
   pump1.begin();
   pump2.begin();
 
@@ -133,13 +141,17 @@ void setup() {
 }
 
 void loop() {
-  waterTemp.requestTemperatures();
+  outgoingTemp.requestTemperatures();
+  ingoingTemp.requestTemperatures();
+  tankTemp.requestTemperatures();
   delay(750);                                // DS18B20 conversion time
-  float tempC = waterTemp.readC(0);
+  float outgoingC = outgoingTemp.readC(0);
+  float ingoingC  = ingoingTemp.readC(0);
+  float tankC     = tankTemp.readC(0);
 
   // Local fail-safe only: if the water sensor is lost (-127 C), never run
   // the pumps. All normal on/off decisions come from the gateway.
-  if (tempC <= -100.0f) {
+  if (outgoingC <= -100.0f || ingoingC <= -100.0f || tankC <= -100.0f) {
     setPumps(false);
   }
 
@@ -156,7 +168,11 @@ void loop() {
   if (millis() - lastSendMs >= TELEMETRY_S * 1000UL) {
     lastSendMs = millis();
     JsonDocument payload;
-    payload["water_temp_c"] = tempC;
+    payload["outgoing_temp_c"] = outgoingC;
+    payload["ingoing_temp_c"] = ingoingC;
+    payload["tank_temp_c"] = tankC;
+    payload["water_temp_c"] = tankC;
+    payload["compressor"] = compressor.isOn() ? "on" : "off";
     payload["pump1"] = pump1.isOn() ? "on" : "off";
     payload["pump2"] = pump2.isOn() ? "on" : "off";
     sendMsg(MsgType::Telemetry, payload);

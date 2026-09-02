@@ -11,10 +11,11 @@
  *   - NOT ADC2             (0, 2, 4, 12, 13, 14, 15, 25, 26, 27 - unusable with
  *                            analogRead while Wi-Fi / ESP-NOW is active)
  *   -> digital-safe pool: 18, 19, 21, 22, 23, 32, 33
+ *   -> GPIO25 is used here as a digital-only DHT22 input.
  */
 #pragma once
 #include <Arduino.h>
 
 // ---- Pin map ----
 static const uint8_t PIN_SSR_DEHUM = 23;   // SSR -> dehumidifier
-static const uint8_t PIN_DHT22     = 32;   // DHT22 data pin (add 10k pull-up to 3V3)
+static const uint8_t PIN_DHT22     = 25;   // DHT22 data pin (add 10k pull-up to 3V3)
