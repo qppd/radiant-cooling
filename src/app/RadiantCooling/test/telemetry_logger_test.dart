@@ -48,12 +48,10 @@ void main() {
       supplyC: 16.0,
     ));
 
-    // 1h window: only the 30-min-old point.
     final window = await logger.loadWindow(const Duration(hours: 1));
     expect(window, hasLength(1));
     expect(window.first.supplyC, 15.0);
 
-    // 3h window: both points.
     final all = await logger.loadWindow(const Duration(hours: 3));
     expect(all, hasLength(2));
   });

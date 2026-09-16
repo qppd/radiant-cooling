@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../models/alert.dart';
 import '../services/alert_service.dart';
 
-/// Event log screen showing system alerts and warnings detected from
-/// Firebase stream changes, stored locally.
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key, required this.alertService});
 
@@ -53,7 +51,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
 
     return Column(
       children: [
-        // Filter chips.
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
           child: Row(
@@ -88,7 +85,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
           ),
         ),
 
-        // Alert list.
         Expanded(
           child: _filtered.isEmpty
               ? Center(

@@ -27,9 +27,6 @@ import 'services/weather_key_store.dart';
 import 'widgets/app_logo.dart';
 import 'widgets/app_shell.dart';
 
-/// Firebase options shared by every platform. Explicit options mean the app
-/// works without a per-platform google-services.json — values live in the
-/// git-ignored `AppConfig` (see `app_config.example.dart` for the template).
 FirebaseOptions get _firebaseOptions => const FirebaseOptions(
       apiKey: AppConfig.firebaseApiKey,
       appId: AppConfig.firebaseAppId,
@@ -61,7 +58,6 @@ class RadiantCoolingApp extends StatelessWidget {
   }
 }
 
-/// Entry point: checks onboarding flag, then shows AuthGate.
 class AppEntry extends StatefulWidget {
   const AppEntry({super.key});
 
@@ -107,7 +103,6 @@ class _AppEntryState extends State<AppEntry> {
   }
 }
 
-/// Shows the login/signup screen when signed out, the main shell when in.
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
 
@@ -151,7 +146,6 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
-/// Bottom-navigation shell: Dashboard (live data) and Settings.
 class HomeShell extends StatefulWidget {
   const HomeShell({super.key, required this.auth});
 
@@ -169,7 +163,6 @@ class _HomeShellState extends State<HomeShell> {
   final _alertService = AlertService();
   final _notificationService = NotificationService();
 
-  // Stream subscriptions for background telemetry logging + alert detection.
   final List<StreamSubscription<dynamic>> _subs = [];
 
   String? _linkedId;
@@ -186,10 +179,7 @@ class _HomeShellState extends State<HomeShell> {
     _load();
   }
 
-  /// Subscribe to all Firebase streams for telemetry logging and alert
-  /// detection. Subscriptions are cancelled in [dispose].
   void _startStreamListeners() {
-    // Monitor telemetry — log pipe temps + outdoor weather.
     _subs.add(_firebase.monitorStream().listen((m) {
       _telemetryLogger.log(TelemetryPoint(
         timestamp: DateTime.now(),
@@ -207,24 +197,13 @@ class _HomeShellState extends State<HomeShell> {
       _checkAlertCount(wasCount);
     }));
 
-    // Chiller telemetry — log water temp.
     _subs.add(_firebase.chillerStream().listen((ch) {
-      // The TelemetryPoint is appended by the monitor listener; chiller
-      // data is merged in the next log cycle. For now we only need the
-      // latest values — the monitor listener fires first and captures
-      // the supply/return/pipe data.
     }));
 
-    // Dehumidifier telemetry — log indoor temp + humidity.
     _subs.add(_firebase.dhStream().listen((dh) {
-      // Indoor climate is logged via the monitor listener batch; we
-      // don't create a separate TelemetryPoint here to avoid double-
-      // logging. The monitor listener already captures outdoor data;
-      // indoor data is merged in the _logDh helper below.
       _logDh(dh);
     }));
 
-    // Heartbeat — detect gateway going offline.
     _subs.add(_firebase.heartbeatStream().listen((hb) {
       final wasCount = _unreadAlertCount;
       _alertService.processHeartbeat(
@@ -235,12 +214,9 @@ class _HomeShellState extends State<HomeShell> {
     }));
   }
 
-  /// Merge indoor climate data into the most recent TelemetryPoint.
-  /// Called when dehumidifier telemetry arrives.
   void _logDh(DhTelemetry dh) async {
     final points = await _telemetryLogger.load();
     if (points.isNotEmpty) {
-      // Update the most recent point with indoor data.
       final last = points.last;
       final updated = TelemetryPoint(
         timestamp: last.timestamp,
@@ -253,14 +229,11 @@ class _HomeShellState extends State<HomeShell> {
         outdoorTempC: last.outdoorTempC,
         outdoorDewPointC: last.outdoorDewPointC,
       );
-      // Replace the last point (the file is small enough to rewrite).
       points.last = updated;
-      // Persist via the logger's internal file.
       await _telemetryLogger.log(updated);
     }
   }
 
-  /// Check if AlertService added new alerts and update badge count.
   void _checkAlertCount(int previousCount) async {
     final alerts = await _alertService.load();
     if (!mounted) return;
@@ -287,8 +260,6 @@ class _HomeShellState extends State<HomeShell> {
       _weatherKey = key;
       _loading = false;
     });
-    // The gateway keeps the key in RAM only, so re-deliver it whenever the
-    // app starts (e.g. after a gateway reboot).
     if (id != null && key != null && key.isNotEmpty) {
       await _publishKey(key);
     }
@@ -326,8 +297,6 @@ class _HomeShellState extends State<HomeShell> {
   }
 
   Future<void> _linkSystem() async {
-    // Listing the registry is best-effort: a permission/offline failure must
-    // not block manual linking (the text field still works without chips).
     List<String> discovered = const [];
     try {
       discovered = await _firebase.discoverSystems();
@@ -387,8 +356,6 @@ class _HomeShellState extends State<HomeShell> {
 
     if (id == null || id.isEmpty) return;
 
-    // Validate against the device registry (written by the gateway) so the
-    // user is told if the gateway is offline or the ID is wrong.
     final known = await _firebase.isKnownSystem(id);
     await _linkAndSave(id);
     if (!mounted) return;
@@ -403,8 +370,6 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  /// Save a linked system ID and re-deliver the WeatherAPI key to the
-  /// gateway (the gateway keeps it in RAM only).
   Future<void> _linkAndSave(String id) async {
     await _deviceLink.save(id);
     if (!mounted) return;
@@ -414,7 +379,6 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
-  /// Called by the first-login [LinkDeviceScreen] after a successful link.
   void _onLinkedFromScreen(String id) {
     if (!mounted) return;
     setState(() => _linkedId = id);
@@ -433,8 +397,6 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
-    // First login / new account: force the device linking page before the
-    // shell so the dashboard has a system to stream.
     if (_loading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
@@ -451,7 +413,6 @@ class _HomeShellState extends State<HomeShell> {
       onTabChanged: (i) {
         setState(() {
           _tabIndex = i;
-          // Clear badge when user opens the Alerts tab.
           if (i == 2) _unreadAlertCount = 0;
         });
       },
@@ -459,7 +420,7 @@ class _HomeShellState extends State<HomeShell> {
         DashboardScreen(
           firebase: _firebase,
           linkedId: _linkedId,
-          onRefresh: () {}, // streams auto-update; refresh just shows spinner
+          onRefresh: () {},
         ),
         TrendsScreen(firebase: _firebase, logger: _telemetryLogger),
         AlertsScreen(alertService: _alertService),

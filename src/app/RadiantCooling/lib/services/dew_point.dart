@@ -1,11 +1,5 @@
 import 'dart:math';
 
-/// Magnus-formula dew point (°C), mirroring the gateway's
-/// `ClimateControl::dewPointC` so the app computes the same values live
-/// from the Firebase telemetry streams.
-///
-/// Returns null when the inputs are invalid (missing, out-of-range
-/// humidity, or a temperature outside the valid window).
 double? dewPointC(double? tempC, double? humidityPct) {
   if (tempC == null || humidityPct == null) return null;
   if (humidityPct <= 0 || humidityPct > 100) return null;

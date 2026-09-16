@@ -4,7 +4,7 @@ EspNowReceiveCb EspNowTransport::_recvHandler = nullptr;
 EspNowSendCb    EspNowTransport::_sendHandler = nullptr;
 
 bool EspNowTransport::begin() {
-  WiFi.mode(WIFI_STA);                     // ESP-NOW requires station mode
+  WiFi.mode(WIFI_STA);
   if (esp_now_init() != ESP_OK) return false;
   esp_now_register_recv_cb(_recvCb);
   esp_now_register_send_cb(_sendCb);

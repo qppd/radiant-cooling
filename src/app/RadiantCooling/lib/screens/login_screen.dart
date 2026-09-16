@@ -5,10 +5,6 @@ import '../services/auth_service.dart';
 import '../widgets/app_logo.dart';
 import 'register_screen.dart';
 
-/// Login screen — email/password sign-in via Firebase Auth.
-///
-/// Navigates to the register screen for new accounts. The auth stream in
-/// [AuthGate] (main.dart) flips to the home shell on successful sign-in.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key, required this.auth});
 
@@ -76,7 +72,6 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await widget.auth.signIn(_email.text, _password.text);
-      // Success: the auth stream flips AuthGate to the home screen.
     } catch (e) {
       if (mounted) setState(() => _error = _messageFor(e));
     } finally {

@@ -1,9 +1,3 @@
-/*
- * SsrOutput.h - component module
- *
- * Wraps a solid state relay (SSR) digital output. Used to switch water
- * pumps (chiller board) and the dehumidifier (dehumidifier board).
- */
 #pragma once
 #include <Arduino.h>
 
@@ -11,7 +5,7 @@ class SsrOutput {
 public:
   explicit SsrOutput(uint8_t pin);
 
-  void begin();            // pin as output, starts OFF
+  void begin();
   void on();
   void off();
   void set(bool state);

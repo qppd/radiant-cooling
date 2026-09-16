@@ -9,8 +9,6 @@ import 'package:radiant_cooling/services/notification_service.dart';
 import 'package:radiant_cooling/services/radiant_firebase.dart';
 import 'package:radiant_cooling/services/telemetry_logger.dart';
 
-/// Test double for [AuthService]: records calls and can throw on demand.
-/// Built on the lazy-injection seam, so no Firebase plugin is touched.
 class FakeAuthService extends AuthService {
   FakeAuthService() : super();
 
@@ -23,7 +21,6 @@ class FakeAuthService extends AuthService {
   String? lastSignUpEmail;
   String? lastSignUpPassword;
 
-  /// When set, [signIn]/[signUp] throw this (e.g. a `FirebaseAuthException`).
   Object? signInError;
   Object? signUpError;
 
@@ -33,7 +30,6 @@ class FakeAuthService extends AuthService {
   @override
   Future<void> signIn(String email, String password) async {
     signInCalls++;
-    // Mirror AuthService: emails are trimmed before being sent to Firebase.
     lastSignInEmail = email.trim();
     lastSignInPassword = password;
     final error = signInError;
@@ -53,10 +49,6 @@ class FakeAuthService extends AuthService {
   Future<void> signOut() async {}
 }
 
-/// Test double for [RadiantFirebase]. Each stream getter returns a fresh
-/// single-value stream (so every listener — multiple `StreamBuilder`s or
-/// a `stream.first` call — receives the value), and config writes are
-/// recorded.
 class FakeRadiantFirebase extends RadiantFirebase {
   FakeRadiantFirebase({
     MonitorTelemetry? monitor,
@@ -92,7 +84,6 @@ class FakeRadiantFirebase extends RadiantFirebase {
   ControlParams? lastControlParamsWrite;
   DhConfig? lastDhConfigWrite;
 
-  /// Device registry used by [discoverSystems]/[isKnownSystem] (linking).
   List<String> knownSystems = const [];
 
   @override
@@ -151,7 +142,6 @@ class FakeRadiantFirebase extends RadiantFirebase {
   }
 }
 
-/// Fake [TelemetryLogger] that stores points in memory.
 class FakeTelemetryLogger extends TelemetryLogger {
   FakeTelemetryLogger() : super();
 
@@ -178,7 +168,6 @@ class FakeTelemetryLogger extends TelemetryLogger {
   Future<void> clear() async => _points.clear();
 }
 
-/// Fake [AlertService] that stores alerts in memory.
 class FakeAlertService extends AlertService {
   FakeAlertService() : super();
 
@@ -196,7 +185,6 @@ class FakeAlertService extends AlertService {
   Future<void> clear() async => _alerts.clear();
 }
 
-/// Fake [NotificationService] backed by in-memory prefs.
 class FakeNotificationService extends NotificationService {
   FakeNotificationService() : super();
 

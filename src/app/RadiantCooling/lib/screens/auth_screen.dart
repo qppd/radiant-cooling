@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../widgets/app_logo.dart';
 
-/// Login / Sign up screen (email/password via Firebase Auth).
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key, required this.auth});
 
@@ -93,7 +92,6 @@ class _AuthScreenState extends State<AuthScreen> {
       } else {
         await widget.auth.signIn(_email.text, _password.text);
       }
-      // Success: the auth stream flips AuthGate to the home screen.
     } catch (e) {
       if (mounted) setState(() => _error = _messageFor(e));
     } finally {

@@ -1,7 +1,3 @@
-/// Typed views of the Firebase `radiant/*` nodes used by the dashboard.
-///
-/// Each `fromMap` tolerates missing keys (returns nulls/0) so the UI can
-/// render whatever the gateway currently publishes.
 library;
 
 double? _num(Map<dynamic, dynamic>? m, String key) {
@@ -22,7 +18,6 @@ List<double?> _list(Map<dynamic, dynamic>? m, String key) {
   ];
 }
 
-/// `radiant/telemetry/monitor/latest`
 class MonitorTelemetry {
   const MonitorTelemetry({
     this.supplyC,
@@ -44,7 +39,6 @@ class MonitorTelemetry {
   final double? coldestPipeC;
   final double? deltaTC;
 
-  /// Raw DS18B20 readings: `[supply, return, pipe1..pipe4]`.
   final List<double?> tempsC;
 
   final double? outdoorTempC;
@@ -72,7 +66,6 @@ class MonitorTelemetry {
       );
 }
 
-/// `radiant/telemetry/chiller/latest`
 class ChillerTelemetry {
   const ChillerTelemetry({
     this.waterTempC,
@@ -95,7 +88,6 @@ class ChillerTelemetry {
       );
 }
 
-/// `radiant/telemetry/dh/latest`
 class DhTelemetry {
   const DhTelemetry({this.tempC, this.humidityPct, this.ts});
 
@@ -110,7 +102,6 @@ class DhTelemetry {
   );
 }
 
-/// `radiant/state/dh` — dehumidifier actuator state.
 class DhState {
   const DhState({this.on = false});
 
@@ -120,7 +111,6 @@ class DhState {
       DhState(on: _flag(m, 'dehumidifier', 'on'));
 }
 
-/// `radiant/state/chiller` — chiller pump actuator states.
 class ChillerState {
   const ChillerState({this.pump1On = false, this.pump2On = false});
 
@@ -133,7 +123,6 @@ class ChillerState {
   );
 }
 
-/// `radiant/heartbeat/monitor` — gateway connectivity + device id.
 class Heartbeat {
   const Heartbeat({this.online = false, this.deviceId, this.ts});
 

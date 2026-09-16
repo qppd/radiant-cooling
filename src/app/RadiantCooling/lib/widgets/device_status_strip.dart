@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../models/telemetry.dart';
 import '../services/radiant_firebase.dart';
 
-/// Compact horizontal strip showing the online/offline status of all three
-/// ESP32 boards. Displayed at the top of the DashboardScreen.
 class DeviceStatusStrip extends StatelessWidget {
   const DeviceStatusStrip({
     super.key,
@@ -23,7 +21,6 @@ class DeviceStatusStrip extends StatelessWidget {
         return StreamBuilder<ChillerTelemetry>(
           stream: firebase.chillerStream(),
           builder: (context, chSnap) {
-            // Chiller is considered online if it has a recent timestamp.
             final chOnline = chSnap.data?.ts != null;
             return StreamBuilder<DhTelemetry>(
               stream: firebase.dhStream(),

@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// The Radiant Cooling brand logo (rounded-square blue art with transparent
-/// corners), sized and softly rounded to sit on any background.
 class AppLogo extends StatelessWidget {
   const AppLogo({super.key, this.size = 96});
 
@@ -9,9 +7,6 @@ class AppLogo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Center + SizedBox keeps the logo at exactly `size` even when the
-    // parent is a stretched column (e.g. the auth card), which would
-    // otherwise force the logo as wide as the card.
     return Center(
       child: SizedBox(
         width: size,
@@ -23,7 +18,6 @@ class AppLogo extends StatelessWidget {
             width: size,
             height: size,
             fit: BoxFit.cover,
-            // Decode at display size to keep memory low on small screens.
             cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
           ),
         ),

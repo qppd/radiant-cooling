@@ -1,14 +1,7 @@
-/// Alert event model for the local event log.
-///
-/// Alerts are detected from Firebase stream changes (gateway offline,
-/// sensor failure, condensation risk, etc.) and stored locally for
-/// the Alerts screen.
 library;
 
-/// Severity level of an alert.
 enum AlertSeverity { critical, warning, info }
 
-/// Type of alert event detected from the system.
 enum AlertType {
   gatewayOffline,
   sensorFailure,
@@ -19,7 +12,6 @@ enum AlertType {
   systemLinked,
 }
 
-/// A single alert event in the log.
 class Alert {
   const Alert({
     required this.type,
@@ -35,7 +27,6 @@ class Alert {
   final String message;
   final DateTime timestamp;
 
-  /// Round-trip through JSON for local storage.
   Map<String, dynamic> toJson() => {
     'type': type.name,
     'severity': severity.name,

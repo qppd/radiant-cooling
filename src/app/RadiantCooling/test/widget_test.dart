@@ -15,7 +15,6 @@ void main() {
     await link.save('RADIANT-001');
     expect(await link.load(), 'RADIANT-001');
 
-    // Values are trimmed on save.
     await link.save('  RADIANT-002  ');
     expect(await link.load(), 'RADIANT-002');
 

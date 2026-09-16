@@ -11,7 +11,6 @@ void main() {
     FakeRadiantFirebase firebase, {
     String? linkedId = 'RADIANT-001',
   }) async {
-    // Tall surface so the whole ListView is laid out (footer included).
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -23,7 +22,6 @@ void main() {
         ),
       ),
     );
-    // Nested StreamBuilders resolve over a couple of frames.
     await tester.pump();
     await tester.pump();
   }
@@ -62,41 +60,33 @@ void main() {
     );
     await pumpDashboard(tester, firebase);
 
-    // Gateway status.
     expect(find.text('Gateway online'), findsOneWidget);
     expect(find.textContaining('System RADIANT-001'), findsOneWidget);
 
-    // Outdoor weather.
     expect(find.text('31.2 °C'), findsOneWidget);
     expect(find.text('24.5 °C'), findsOneWidget);
     expect(find.text('66 %'), findsOneWidget);
 
-    // Cooling loop (supply appears twice: card + pipe sensor list).
     expect(find.text('16.2 °C'), findsWidgets);
     expect(find.text('16.8 °C'), findsWidgets);
     expect(find.text('0.6 °C'), findsOneWidget);
-    expect(find.text('12.4 °C'), findsOneWidget); // tank
+    expect(find.text('12.4 °C'), findsOneWidget);
 
-    // Pipe sensors.
     expect(find.text('17.1 °C'), findsOneWidget);
     expect(find.text('22.4 °C'), findsOneWidget);
 
-    // Control section: pump 1 + dehumidifier ON, pump 2 OFF.
     expect(find.text('Chiller pump 1'), findsOneWidget);
     expect(find.text('Chiller pump 2'), findsOneWidget);
-    expect(find.text('Dehumidifier'), findsWidgets); // strip + control
+    expect(find.text('Dehumidifier'), findsWidgets);
     expect(find.text('ON'), findsNWidgets(2));
     expect(find.text('OFF'), findsOneWidget);
 
-    // Indoor climate.
     expect(find.text('26.0 °C'), findsOneWidget);
     expect(find.text('55 %'), findsOneWidget);
 
-    // Condensation safety (values computed by the gateway).
     expect(find.text('18.0 °C'), findsOneWidget);
     expect(find.text('20.0 °C'), findsOneWidget);
 
-    // Footer.
     expect(find.textContaining('device RADIANT-001'), findsOneWidget);
   });
 
@@ -114,7 +104,6 @@ void main() {
 
     expect(find.text('Gateway offline'), findsOneWidget);
     expect(find.text('No pipe readings yet'), findsOneWidget);
-    // Every metric falls back to an em dash.
     expect(find.text('—'), findsWidgets);
   });
 }

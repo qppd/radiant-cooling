@@ -4,8 +4,6 @@ import 'package:flutter/services.dart';
 import '../services/radiant_firebase.dart';
 import '../widgets/section_card.dart';
 
-/// Settings: control parameters, dehumidifier target, system link,
-/// WeatherAPI key, and sign out.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({
     super.key,
@@ -339,8 +337,6 @@ class _NumberFieldSpec {
   final double max;
 }
 
-/// A dialog of numeric fields that validates each value against its range
-/// and returns the parsed result via `onSave`.
 class _NumberDialog<T> extends StatefulWidget {
   const _NumberDialog({
     required this.title,

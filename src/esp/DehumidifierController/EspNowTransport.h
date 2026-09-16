@@ -1,10 +1,3 @@
-/*
- * EspNowTransport.h - communication module
- *
- * Wraps the WiFi + esp_now libraries (built into the Arduino ESP32 core).
- * Works in both roles: gateway (RadiantCoolingMonitor, registers several
- * peers) and peer (registers the gateway and sends telemetry).
- */
 #pragma once
 #include <Arduino.h>
 #include <WiFi.h>
@@ -16,14 +9,13 @@ typedef void (*EspNowSendCb)(const uint8_t* mac, bool success);
 
 class EspNowTransport {
 public:
-  bool begin();                                // STA mode + esp_now_init
+  bool begin();
   bool addPeer(const uint8_t* mac, uint8_t channel = 0);
   bool sendTo(const uint8_t* mac, const uint8_t* data, size_t len);
   void onReceive(EspNowReceiveCb cb);
   void onSend(EspNowSendCb cb);
 
 private:
-  // ESP32 core 3.x callback signatures (esp_now_recv_info_t / esp_now_send_info_t).
   static void _recvCb(const esp_now_recv_info_t* info, const uint8_t* data, int len);
   static void _sendCb(const esp_now_send_info_t* txInfo, esp_now_send_status_t status);
   static EspNowReceiveCb _recvHandler;

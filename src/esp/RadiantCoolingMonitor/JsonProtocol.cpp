@@ -18,7 +18,7 @@ bool JsonProtocol::decode(const char* json, size_t len, IncomingMessage& msg) {
 
   const int t = doc["t"] | 0;
   if (t < static_cast<int>(MsgType::Telemetry) || t > static_cast<int>(MsgType::Status)) {
-    return false;                        // unknown message type
+    return false;
   }
   msg.version = doc["v"] | 0;
   msg.type    = static_cast<MsgType>(t);

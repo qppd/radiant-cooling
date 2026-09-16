@@ -3,8 +3,6 @@ import 'package:flutter/material.dart';
 import '../services/notification_service.dart';
 import '../widgets/section_card.dart';
 
-/// Notification preferences screen — toggle which alerts generate
-/// push notifications and configure quiet hours.
 class NotificationSettingsScreen extends StatefulWidget {
   const NotificationSettingsScreen({super.key, required this.service});
 
@@ -51,7 +49,6 @@ class _NotificationSettingsScreenState
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Master toggle.
           SwitchListTile(
             title: const Text('Enable notifications'),
             subtitle: const Text('Master toggle for all alerts'),
@@ -60,7 +57,6 @@ class _NotificationSettingsScreenState
           ),
           const Divider(),
 
-          // Individual toggles.
           SectionCard(
             title: 'Alert types',
             icon: Icons.notifications_outlined,
@@ -83,7 +79,6 @@ class _NotificationSettingsScreenState
           ),
           const SizedBox(height: 12),
 
-          // Quiet hours.
           SectionCard(
             title: 'Quiet hours',
             icon: Icons.do_not_disturb_on_outlined,

@@ -1,11 +1,8 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Manages notification preferences (which alerts generate push notifications,
-/// quiet hours). Persists to SharedPreferences.
 class NotificationService {
   static const _prefix = 'notif_';
 
-  // Toggle keys.
   static const _allEnabled = '${_prefix}all_enabled';
   static const _gatewayOffline = '${_prefix}gateway_offline';
   static const _sensorFailure = '${_prefix}sensor_failure';
@@ -14,11 +11,9 @@ class NotificationService {
   static const _pumpsState = '${_prefix}pumps_state';
   static const _dehumidifierState = '${_prefix}dehumidifier_state';
 
-  // Quiet hours.
   static const _quietStart = '${_prefix}quiet_start';
   static const _quietEnd = '${_prefix}quiet_end';
 
-  /// Load all notification preferences.
   Future<NotificationPrefs> load() async {
     final prefs = await SharedPreferences.getInstance();
     return NotificationPrefs(
@@ -34,7 +29,6 @@ class NotificationService {
     );
   }
 
-  /// Save notification preferences.
   Future<void> save(NotificationPrefs prefs) async {
     final sp = await SharedPreferences.getInstance();
     await sp.setBool(_allEnabled, prefs.allEnabled);
@@ -48,10 +42,8 @@ class NotificationService {
     await sp.setInt(_quietEnd, prefs.quietEndHour);
   }
 
-  /// Check if a specific alert type should trigger a notification.
   bool shouldNotify(NotificationPrefs prefs, String alertType) {
     if (!prefs.allEnabled) return false;
-    // Check quiet hours.
     final hour = DateTime.now().hour;
     if (prefs.quietStartHour != prefs.quietEndHour) {
       if (prefs.quietStartHour < prefs.quietEndHour) {
@@ -59,7 +51,6 @@ class NotificationService {
           return false;
         }
       } else {
-        // Wraps midnight (e.g. 22..7).
         if (hour >= prefs.quietStartHour || hour < prefs.quietEndHour) {
           return false;
         }
@@ -84,7 +75,6 @@ class NotificationService {
   }
 }
 
-/// Notification preference values.
 class NotificationPrefs {
   const NotificationPrefs({
     this.allEnabled = true,

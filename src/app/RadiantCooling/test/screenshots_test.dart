@@ -1,13 +1,3 @@
-// Golden-capture harness for the app's screenshots (docs/screenshots/).
-//
-// By default these tests are SKIPPED (they only render app chrome with real
-// fonts and compare goldens, which is meaningless without the goldens). To
-// (re)generate the screenshots run:
-//
-//   flutter test --dart-define=GEN_SCREENSHOTS=true --update-goldens \
-//     test/screenshots_test.dart
-//
-// PNGs are written to docs/screenshots/ (git-ignored).
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -28,15 +18,14 @@ import 'fakes.dart';
 
 const _gen = bool.fromEnvironment('GEN_SCREENSHOTS');
 
-const _phoneSize = Size(390, 844); // logical pixels
+const _phoneSize = Size(390, 844);
 
-/// Load real fonts so text renders as text (not the blocky test font).
 Future<void> _loadRealFonts() async {
   const dir = 'C:/Windows/Fonts';
   Future<ByteData> bytes(String file) async =>
       (await File('$dir/$file').readAsBytes()).buffer.asByteData();
 
-  if (!File('$dir/segoeui.ttf').existsSync()) return; // non-Windows: fall back
+  if (!File('$dir/segoeui.ttf').existsSync()) return;
   final loader = FontLoader('Roboto')
     ..addFont(bytes('segoeui.ttf'));
   await loader.load();
@@ -54,12 +43,8 @@ void _setPhone(WidgetTester tester) {
 }
 
 Future<void> _capture(WidgetTester tester, String name) async {
-  // Let async image decoding (e.g. the AppLogo asset) finish before
-  // capturing, otherwise the logo renders as an empty box.
   await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 1)));
   await tester.pumpAndSettle();
-  // Resolved relative to this test file (src/app/RadiantCooling/test/):
-  // ../../../../ = repo root.
   await expectLater(
     find.byType(MaterialApp),
     matchesGoldenFile('../../../../docs/screenshots/$name.png'),

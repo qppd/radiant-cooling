@@ -8,8 +8,6 @@ import '../services/radiant_firebase.dart';
 import '../services/telemetry_logger.dart';
 import '../widgets/section_card.dart';
 
-/// Trend charts for temperature and humidity, fed by the local
-/// [TelemetryLogger] and live Firebase streams.
 class TrendsScreen extends StatefulWidget {
   const TrendsScreen({
     super.key,
@@ -80,7 +78,6 @@ class _TrendsScreenState extends State<TrendsScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        // Period selector.
         SegmentedButton<Duration>(
           segments: const [
             ButtonSegment(value: Duration(hours: 1), label: Text('1h')),
@@ -96,7 +93,6 @@ class _TrendsScreenState extends State<TrendsScreen> {
         ),
         const SizedBox(height: 16),
 
-        // Pipe temperatures chart.
         SectionCard(
           title: 'Pipe temperatures',
           icon: Icons.thermostat,
@@ -131,7 +127,6 @@ class _TrendsScreenState extends State<TrendsScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Indoor climate chart.
         SectionCard(
           title: 'Indoor climate',
           icon: Icons.home_outlined,
@@ -170,7 +165,6 @@ class _TrendsScreenState extends State<TrendsScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Outdoor weather chart.
         SectionCard(
           title: 'Outdoor weather',
           icon: Icons.wb_sunny_outlined,
@@ -195,14 +189,12 @@ class _TrendsScreenState extends State<TrendsScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Summary stats.
         _SummaryStats(points: _points),
       ],
     );
   }
 }
 
-// ---- Internal chart widgets ----
 
 class _Series {
   const _Series({
@@ -228,7 +220,6 @@ class _LineChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Find Y range.
     double yMin = double.infinity;
     double yMax = double.negativeInfinity;
     for (final s in series) {

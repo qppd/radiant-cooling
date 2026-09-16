@@ -3,16 +3,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../widgets/app_logo.dart';
 
-/// Onboarding tour shown on the very first app launch. Four swipeable pages
-/// introduce the system, then the user proceeds to login.
-///
-/// Completion is persisted in SharedPreferences so this screen is shown
-/// exactly once per install.
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key, required this.onComplete});
 
-  /// Called when the user finishes or skips the tour. The caller should
-  /// navigate to the login/auth flow.
   final VoidCallback onComplete;
 
   @override
@@ -93,7 +86,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // Skip button (top right, hidden on last page).
             Align(
               alignment: Alignment.topRight,
               child: isLast
@@ -104,7 +96,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     ),
             ),
 
-            // Page view.
             Expanded(
               child: PageView.builder(
                 controller: _controller,
@@ -117,7 +108,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        // Icon circle.
                         Container(
                           width: 120,
                           height: 120,
@@ -132,7 +122,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
-                        // Title.
                         Text(
                           p.title,
                           style: theme.textTheme.headlineSmall?.copyWith(
@@ -141,7 +130,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 8),
-                        // Subtitle.
                         Text(
                           p.subtitle,
                           style: theme.textTheme.titleMedium?.copyWith(
@@ -150,7 +138,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           textAlign: TextAlign.center,
                         ),
                         const SizedBox(height: 16),
-                        // Body text.
                         Text(
                           p.body,
                           style: theme.textTheme.bodyLarge?.copyWith(
@@ -166,7 +153,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
 
-            // Dot indicators.
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Row(
@@ -189,7 +175,6 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
 
-            // Next / Get Started button.
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               child: SizedBox(

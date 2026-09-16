@@ -4,7 +4,6 @@ import 'dart:io';
 
 import 'package:path_provider/path_provider.dart';
 
-/// A single telemetry snapshot stored locally for trend charts.
 class TelemetryPoint {
   const TelemetryPoint({
     required this.timestamp,
@@ -54,16 +53,12 @@ class TelemetryPoint {
       );
 }
 
-/// Persists telemetry data points to a local JSON file for trend charts.
-///
-/// Retention: 7 days (auto-pruned on each write). Each data point is
-/// one Firebase publish cycle (~30 s), so 7 days ≈ 20,160 points max.
 class TelemetryLogger {
   TelemetryLogger({File? file}) : _file = file;
 
   File? _file;
   static const _maxAge = Duration(days: 7);
-  static const _maxPoints = 20160; // 7 days × 24h × 60min / 30s interval
+  static const _maxPoints = 20160;
 
   Future<File> _getFile() async {
     if (_file != null) return _file!;
@@ -72,7 +67,6 @@ class TelemetryLogger {
     return _file!;
   }
 
-  /// Load all stored points (newest last).
   Future<List<TelemetryPoint>> load() async {
     try {
       final file = await _getFile();
@@ -86,16 +80,13 @@ class TelemetryLogger {
     }
   }
 
-  /// Append a new data point and prune old entries.
   Future<void> log(TelemetryPoint point) async {
     final points = List<TelemetryPoint>.from(await load());
     points.add(point);
 
-    // Prune entries older than _maxAge.
     final cutoff = DateTime.now().subtract(_maxAge);
     points.removeWhere((p) => p.timestamp.isBefore(cutoff));
 
-    // Hard cap to prevent unbounded growth.
     if (points.length > _maxPoints) {
       points.removeRange(0, points.length - _maxPoints);
     }
@@ -105,14 +96,12 @@ class TelemetryLogger {
     await file.writeAsString(json);
   }
 
-  /// Return points within a time window (newest last).
   Future<List<TelemetryPoint>> loadWindow(Duration window) async {
     final all = await load();
     final cutoff = DateTime.now().subtract(window);
     return [for (final p in all) if (!p.timestamp.isBefore(cutoff)) p];
   }
 
-  /// Clear all stored data.
   Future<void> clear() async {
     final file = await _getFile();
     if (await file.exists()) await file.delete();

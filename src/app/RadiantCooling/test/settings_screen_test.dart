@@ -59,7 +59,7 @@ void main() {
 
     expect(find.text('RADIANT-001'), findsOneWidget);
     expect(find.text('WeatherAPI key set'), findsOneWidget);
-    expect(find.text('Change'), findsNWidgets(2)); // link + key
+    expect(find.text('Change'), findsNWidgets(2));
     expect(find.text('Sign out'), findsOneWidget);
 
     await tester.tap(find.text('Sign out'));
@@ -129,7 +129,6 @@ void main() {
     await tester.tap(find.widgetWithText(TextButton, 'Edit').first);
     await tester.pumpAndSettle();
 
-    // Dialog opens with the three numeric fields.
     expect(find.text('Comfort setpoint (°C)'), findsOneWidget);
     await tester.enterText(find.byType(TextFormField).at(0), '27.0');
     await tester.tap(find.widgetWithText(FilledButton, 'Save'));

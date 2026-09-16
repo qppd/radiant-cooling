@@ -5,10 +5,6 @@ import '../services/auth_service.dart';
 import '../widgets/app_logo.dart';
 import 'login_screen.dart';
 
-/// Registration screen — create a new account via Firebase Auth.
-///
-/// Navigates to the login screen for existing accounts. The auth stream in
-/// [AuthGate] (main.dart) flips to the home shell on successful sign-up.
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key, required this.auth});
 
@@ -87,7 +83,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     try {
       await widget.auth.signUp(_email.text, _password.text);
-      // Success: the auth stream flips AuthGate to the home screen.
     } catch (e) {
       if (mounted) setState(() => _error = _messageFor(e));
     } finally {

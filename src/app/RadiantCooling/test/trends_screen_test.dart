@@ -62,13 +62,11 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Charts should render.
     expect(find.text('Pipe temperatures'), findsOneWidget);
     expect(find.text('Indoor climate'), findsOneWidget);
     expect(find.text('Outdoor weather'), findsOneWidget);
     expect(find.byType(LineChart), findsWidgets);
 
-    // Summary stats.
     expect(find.text('Supply temperature summary'), findsOneWidget);
     expect(find.text('Points'), findsOneWidget);
   });
@@ -80,7 +78,6 @@ void main() {
 
     final logger = FakeTelemetryLogger();
     final now = DateTime.now();
-    // Add one point 10 minutes ago.
     await logger.log(TelemetryPoint(
       timestamp: now.subtract(const Duration(minutes: 10)),
       supplyC: 15.0,
@@ -99,15 +96,12 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Default 6h window shows the point.
     expect(find.text('Points'), findsOneWidget);
 
-    // Switch to 1h window.
     await tester.tap(find.text('1h'));
     await tester.pump();
     await tester.pump();
 
-    // Point is within 1h, still visible.
     expect(find.text('Points'), findsOneWidget);
   });
 }

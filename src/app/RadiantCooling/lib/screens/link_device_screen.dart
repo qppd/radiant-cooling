@@ -5,12 +5,6 @@ import '../services/device_link.dart';
 import '../services/radiant_firebase.dart';
 import '../widgets/app_logo.dart';
 
-/// Full-screen device linking shown on first login (new accounts) and for
-/// any signed-in user who has not linked a system yet.
-///
-/// The user enters the `SYSTEM_ID` configured in the gateway's `Config.h`
-/// (published in `radiant/devices/<SYSTEM_ID>`). The ID is validated against
-/// the device registry and stored locally via [DeviceLink].
 class LinkDeviceScreen extends StatefulWidget {
   const LinkDeviceScreen({
     super.key,
@@ -22,7 +16,6 @@ class LinkDeviceScreen extends StatefulWidget {
   final RadiantFirebase firebase;
   final DeviceLink deviceLink;
 
-  /// Called with the saved system ID after linking succeeds.
   final ValueChanged<String> onLinked;
 
   @override
@@ -54,7 +47,6 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       if (!mounted) return;
       setState(() => _knownSystems = systems);
     } catch (_) {
-      // Registry unreachable — the user can still type the ID manually.
     }
   }
 
@@ -69,8 +61,6 @@ class _LinkDeviceScreenState extends State<LinkDeviceScreen> {
       _error = null;
     });
 
-    // Validate against the device registry (written by the gateway) so the
-    // user is told if the gateway is offline or the ID is wrong.
     bool known = false;
     try {
       known = await widget.firebase.isKnownSystem(id);

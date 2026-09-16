@@ -8,8 +8,6 @@ import '../services/radiant_firebase.dart';
 import '../widgets/device_status_strip.dart';
 import '../widgets/section_card.dart';
 
-/// Live dashboard: system status, weather, cooling loop, control, and
-/// condensation-safety values streamed from Firebase.
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({
     super.key,
@@ -21,7 +19,6 @@ class DashboardScreen extends StatelessWidget {
   final RadiantFirebase firebase;
   final String? linkedId;
 
-  /// Called when the user pulls to refresh. If null, no refresh is triggered.
   final VoidCallback? onRefresh;
 
   String _fmt(double? v, {int digits = 1}) =>
@@ -44,8 +41,6 @@ class DashboardScreen extends StatelessWidget {
       onRefresh: onRefresh != null
           ? () async {
               onRefresh!();
-              // Brief pause so the spinner is visible while streams deliver
-              // the latest data.
               await Future<void>.delayed(const Duration(milliseconds: 500));
             }
           : () async {},
@@ -211,10 +206,6 @@ class DashboardScreen extends StatelessWidget {
                   return StreamBuilder<ControlParams>(
                     stream: firebase.controlParamsStream(),
                     builder: (context, cSnap) {
-                      // Recompute the gateway's decision client-side from
-                      // the live streamed sensors (Magnus formula): the
-                      // reference dew point is the higher of outdoor and
-                      // indoor, and the water floor is that + the margin.
                       final outdoor = dewPointC(
                         t?.outdoorTempC,
                         t?.outdoorHumidityPct,

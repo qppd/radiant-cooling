@@ -1,25 +1,3 @@
-/*
- * WaterChillerController.ino
- *
- * ESP32 ESP-NOW PEER - reads three water temperatures and switches the
- * compressor SSR and two pump relay channels on command from the gateway.
- *
- * The pump on/off decision is computed on the gateway (RadiantCoolingMonitor)
- * from the outdoor dew point (fetched by the Flutter app) + all sensor
- * readings (see docs/diagrams/flow-chart.md). This board executes commands
- * and reports water temperature back; it only overrides for local
- * fail-safety.
- *
- * This file is glue only. All component/library code is encapsulated:
- *   Config.h            - board configuration (MACs, constants); includes PINS_CONFIG.h
- *   PINS_CONFIG.h       - pin assignments (compressor, pumps, sensors)
- *   TemperatureSensor   - wraps OneWire + DallasTemperature (1x DS18B20/bus)
- *   SsrOutput           - wraps the compressor SSR and relay digital outputs
- *   EspNowTransport     - wraps WiFi + esp_now (register gateway, send/receive)
- *   JsonProtocol        - wraps ArduinoJson (ESP-NOW message envelope)
- *
- * See docs/ for architecture, API and control logic.
- */
 
 #include "Config.h"
 #include "TemperatureSensor.h"
@@ -30,7 +8,6 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 
-// ---- Components ----
 TemperatureSensor outgoingTemp(PIN_TEMP_OUTGOING, 1);
 TemperatureSensor ingoingTemp(PIN_TEMP_INGOING, 1);
 TemperatureSensor tankTemp(PIN_TEMP_TANK, 1);
@@ -39,31 +16,23 @@ SsrOutput pump1(PIN_RELAY_PUMP1);
 SsrOutput pump2(PIN_RELAY_PUMP2);
 EspNowTransport espNow;
 
-// ---- Telemetry state ----
 unsigned long lastSendMs = 0;
 uint32_t seq = 0;
 
-// ESP-NOW receive -> processing is decoupled via a FreeRTOS queue: the
-// receive callback ONLY enqueues raw bytes (never blocks / decodes inside
-// the callback); loop() drains and processes.
 typedef struct {
   uint8_t mac[6];
-  uint8_t data[250];         // ESP-NOW max payload
+  uint8_t data[250];
   size_t  len;
 } EspNowRxPacket;
 QueueHandle_t espNowQueue;
 
-// ---- Helpers ----
 
-// Encode + send a JSON message to the gateway.
 void sendMsg(MsgType type, const JsonDocument& payload) {
   char buf[250];
   size_t n = JsonProtocol::encode(type, DEVICE_ID, ++seq, payload, buf, sizeof(buf));
-  // n == maxLen means the JSON was truncated (serializeJson caps at maxLen).
   if (n > 0 && n < sizeof(buf)) espNow.sendTo(GATEWAY_MAC, (const uint8_t*)buf, n);
 }
 
-// Announce online to the gateway on boot.
 void sendStatus() {
   JsonDocument payload;
   payload["online"]   = true;
@@ -71,7 +40,6 @@ void sendStatus() {
   sendMsg(MsgType::Status, payload);
 }
 
-// Execute the gateway's pump command.
 void setPumps(bool on) {
   if (compressor.isOn() == on && pump1.isOn() == on && pump2.isOn() == on) return;
   compressor.set(on);
@@ -85,33 +53,28 @@ void setPumps(bool on) {
   Serial.printf("[chiller] pumps %s\n", on ? "ON" : "OFF");
 }
 
-// ---- ESP-NOW receive callback: enqueue only, do not block ----
 void handleMessage(const uint8_t* mac, const uint8_t* data, size_t len) {
   if (len == 0 || len > 250 || !espNowQueue) return;
   EspNowRxPacket pkt;
   memcpy(pkt.mac, mac, 6);
   memcpy(pkt.data, data, len);
   pkt.len = len;
-  // esp_now callbacks run in the espnow TASK context, so xQueueSend is correct.
   if (xQueueSend(espNowQueue, &pkt, 0) != pdTRUE) {
     Serial.println("[espnow] RX queue full - packet dropped");
   }
 }
 
-// ---- ESP-NOW delivery status ----
 void handleSendResult(const uint8_t* mac, bool success) {
   Serial.printf("[espnow] send %s -> %02X:%02X:%02X:%02X:%02X:%02X\n",
                 success ? "OK" : "FAIL",
                 mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
-// ---- Apply a decoded command from the gateway ----
 void handleCmd(const IncomingMessage& msg) {
   const char* cmd = msg.data["cmd"] | "";
   if (strcmp(cmd, "set_pumps") == 0) {
     setPumps(String(msg.data["value"] | "") == "on");
   }
-  // Unknown commands are ignored and logged.
   else {
     Serial.printf("[chiller] unknown cmd: %s\n", cmd);
   }
@@ -134,28 +97,25 @@ void setup() {
     return;
   }
   espNow.addPeer(GATEWAY_MAC);
-  espNow.onReceive(handleMessage);      // enqueue only - processed in loop()
-  espNow.onSend(handleSendResult);      // delivery status
+  espNow.onReceive(handleMessage);
+  espNow.onSend(handleSendResult);
 
-  sendStatus();                         // announce online to the gateway
+  sendStatus();
 }
 
 void loop() {
   outgoingTemp.requestTemperatures();
   ingoingTemp.requestTemperatures();
   tankTemp.requestTemperatures();
-  delay(750);                                // DS18B20 conversion time
+  delay(750);
   float outgoingC = outgoingTemp.readC(0);
   float ingoingC  = ingoingTemp.readC(0);
   float tankC     = tankTemp.readC(0);
 
-  // Local fail-safe only: if the water sensor is lost (-127 C), never run
-  // the pumps. All normal on/off decisions come from the gateway.
   if (outgoingC <= -100.0f || ingoingC <= -100.0f || tankC <= -100.0f) {
     setPumps(false);
   }
 
-  // Drain the ESP-NOW RX queue (commands from the gateway)
   EspNowRxPacket pkt;
   while (espNowQueue && xQueueReceive(espNowQueue, &pkt, 0) == pdTRUE) {
     IncomingMessage msg;
@@ -164,7 +124,6 @@ void loop() {
     }
   }
 
-  // Periodic telemetry to gateway (see docs/api.md)
   if (millis() - lastSendMs >= TELEMETRY_S * 1000UL) {
     lastSendMs = millis();
     JsonDocument payload;

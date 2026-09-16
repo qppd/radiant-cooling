@@ -2,10 +2,6 @@ import 'package:flutter/material.dart';
 
 import 'app_logo.dart';
 
-/// The app's main shell chrome: AppBar with the brand logo, an
-/// [IndexedStack] body, and the bottom [NavigationBar]. Used by [HomeShell]
-/// (lib/main.dart) and by the screenshot harness so captures always match
-/// the real UI.
 class AppShell extends StatelessWidget {
   const AppShell({
     super.key,
@@ -19,7 +15,6 @@ class AppShell extends StatelessWidget {
   final ValueChanged<int> onTabChanged;
   final List<Widget> children;
 
-  /// Number to show as a badge on the Alerts tab icon. Zero hides the badge.
   final int alertBadgeCount;
 
   @override

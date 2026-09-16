@@ -7,22 +7,18 @@ WifiProvisioner::WifiProvisioner(const char* apName, uint8_t resetPin,
 bool WifiProvisioner::begin() {
   pinMode(_resetPin, INPUT_PULLUP);
 
-  // Boot-time reset: holding the button while powering up erases credentials
-  // so the captive portal re-opens for new SSID/password.
   if (digitalRead(_resetPin) == LOW) {
-    delay(500);                              // confirm the hold is intentional
+    delay(500);
     if (digitalRead(_resetPin) == LOW) resetSettings();
   }
 
   _wm.setConfigPortalTimeout(_portalTimeoutS);
   _wm.setConnectTimeout(_connectTimeoutS);
-  // _wm.setDebugOutput(false);              // optional: quiet serial output
 
-  // Captive portal: fixed AP IP (192.168.4.1) + branded page.
   _wm.setAPStaticIPConfig(
-    IPAddress(192, 168, 4, 1),   // AP IP
-    IPAddress(192, 168, 4, 1),   // gateway
-    IPAddress(255, 255, 255, 0)  // netmask
+    IPAddress(192, 168, 4, 1),
+    IPAddress(192, 168, 4, 1),
+    IPAddress(255, 255, 255, 0)
   );
   _wm.setCustomHeadElement(R"(
 <style>
@@ -43,7 +39,6 @@ bool WifiProvisioner::begin() {
 </style>
 )");
 
-  // autoConnect joins the saved network or starts the (branded) portal AP.
   return _wm.autoConnect(_apName, _apPassword);
 }
 
@@ -60,21 +55,21 @@ void WifiProvisioner::handleResetButton(unsigned long holdMs) {
     if (_pressStartMs == 0) _pressStartMs = millis();
     if (millis() - _pressStartMs >= holdMs) restart();
   } else {
-    _pressStartMs = 0;                       // released before hold - cancel
+    _pressStartMs = 0;
   }
 }
 
 void WifiProvisioner::reconnectIfLost(unsigned long intervalMs) {
   if (connected()) {
-    _lastReconnectMs = 0;                    // fresh drop -> retry immediately
+    _lastReconnectMs = 0;
     return;
   }
   const unsigned long now = millis();
   if (_lastReconnectMs == 0 || now - _lastReconnectMs >= intervalMs) {
     _lastReconnectMs = now;
     Serial.println("[wifi] connection lost - reconnecting...");
-    WiFi.disconnect(false);                  // keep the radio on
-    WiFi.reconnect();                        // retry with saved credentials
+    WiFi.disconnect(false);
+    WiFi.reconnect();
   }
 }
 
@@ -87,7 +82,7 @@ String WifiProvisioner::localIP() {
 }
 
 void WifiProvisioner::resetSettings() {
-  _wm.resetSettings();                       // erase saved SSID/password
+  _wm.resetSettings();
 }
 
 void WifiProvisioner::restart() {

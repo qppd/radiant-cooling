@@ -22,8 +22,6 @@ WeatherConditions WeatherApi::fetch() {
   HTTPClient http;
   String url = String("https://api.weatherapi.com/v1/current.json?key=")
              + _key + "&q=" + _location + "&aqi=no";
-  // HTTPS needs the ESP32 core's built-in TLS (cert bundle). If the GET
-  // fails on your core version, fall back to WiFiClientSecure + setInsecure().
   if (!http.begin(url)) {
     http.end();
     return out;

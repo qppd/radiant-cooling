@@ -1,9 +1,3 @@
-/*
- * HumiditySensor.h - component module
- *
- * Wraps the DHT library for a DHT22 (temperature + humidity) sensor.
- * Used by the dehumidifier board to compute dew point.
- */
 #pragma once
 #include <Arduino.h>
 #include <DHT.h>
@@ -14,7 +8,6 @@ public:
 
   void begin();
 
-  // Reads both values; returns false on read failure (sensor missing/NAN).
   bool read(float& tempC, float& humidityPct);
 
 private:

@@ -6,18 +6,12 @@ import 'package:path_provider/path_provider.dart';
 
 import '../models/alert.dart';
 
-/// Detects system events from Firebase stream changes and persists them
-/// as [Alert] entries for the Alerts screen.
-///
-/// Call [processHeartbeat], [processMonitorTelemetry], etc. from
-/// StreamBuilder callbacks or stream listeners.
 class AlertService {
   AlertService({File? file}) : _file = file;
 
   File? _file;
   static const _maxAge = Duration(days: 7);
 
-  // Track previous states to detect transitions.
   bool? _prevGatewayOnline;
   double? _prevColdestPipeC;
   double? _prevWaterFloorC;
@@ -29,7 +23,6 @@ class AlertService {
     return _file!;
   }
 
-  /// Process a heartbeat update — detect gateway going offline.
   void processHeartbeat({required bool online, required String deviceId}) {
     if (_prevGatewayOnline == true && online == false) {
       addAlert(Alert(
@@ -43,12 +36,10 @@ class AlertService {
     _prevGatewayOnline = online;
   }
 
-  /// Process monitor telemetry — detect sensor failures and condensation risk.
   void processMonitorTelemetry({
     double? coldestPipeC,
     double? waterFloorC,
   }) {
-    // Sensor failure: coldest pipe dropped to invalid range.
     if (coldestPipeC != null && coldestPipeC <= -100 &&
         (_prevColdestPipeC == null || _prevColdestPipeC! > -100)) {
       addAlert(Alert(
@@ -60,7 +51,6 @@ class AlertService {
       ));
     }
 
-    // Condensation risk: coldest pipe below water floor.
     if (coldestPipeC != null && waterFloorC != null &&
         coldestPipeC < waterFloorC && coldestPipeC > -100) {
       addAlert(Alert(
@@ -78,7 +68,6 @@ class AlertService {
     _prevWaterFloorC = waterFloorC;
   }
 
-  /// Process outdoor weather — detect stale weather data.
   void processWeather({required bool valid}) {
     if (!valid && _prevGatewayOnline == true) {
       addAlert(Alert(
@@ -93,7 +82,6 @@ class AlertService {
     }
   }
 
-  /// Manually record a system-linked event.
   void recordLinked(String systemId) {
     addAlert(Alert(
       type: AlertType.systemLinked,
@@ -104,7 +92,6 @@ class AlertService {
     ));
   }
 
-  /// Load all stored alerts (newest first).
   Future<List<Alert>> load() async {
     try {
       final file = await _getFile();
@@ -115,7 +102,6 @@ class AlertService {
       final alerts = [
         for (final e in list) Alert.fromJson(e as Map<String, dynamic>),
       ];
-      // Newest first.
       alerts.sort((a, b) => b.timestamp.compareTo(a.timestamp));
       return alerts;
     } catch (_) {
@@ -123,12 +109,10 @@ class AlertService {
     }
   }
 
-  /// Append an alert and prune old entries.
   Future<void> addAlert(Alert alert) async {
     final alerts = await load();
-    alerts.insert(0, alert); // newest first
+    alerts.insert(0, alert);
 
-    // Prune entries older than _maxAge.
     final cutoff = DateTime.now().subtract(_maxAge);
     alerts.removeWhere((a) => a.timestamp.isBefore(cutoff));
 
@@ -137,7 +121,6 @@ class AlertService {
     await file.writeAsString(json);
   }
 
-  /// Clear all alerts.
   Future<void> clear() async {
     _prevGatewayOnline = null;
     _prevColdestPipeC = null;
@@ -146,7 +129,6 @@ class AlertService {
     if (await file.exists()) await file.delete();
   }
 
-  /// Reset detection state (e.g. on re-link).
   void resetState() {
     _prevGatewayOnline = null;
     _prevColdestPipeC = null;

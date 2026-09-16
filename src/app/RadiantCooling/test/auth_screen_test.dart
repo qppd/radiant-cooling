@@ -10,7 +10,6 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: AuthScreen(auth: auth)));
   }
 
-  /// Taps the Login/Sign up segmented control.
   Future<void> switchMode(WidgetTester tester, String label) async {
     await tester.tap(
       find.descendant(
@@ -54,7 +53,6 @@ void main() {
     expect(find.text('Create your account'), findsOneWidget);
     expect(find.text('Confirm password'), findsOneWidget);
 
-    // Short password.
     await tester.enterText(find.byType(TextFormField).at(0), 'a@b.co');
     await tester.enterText(find.byType(TextFormField).at(1), '123');
     await tester.enterText(find.byType(TextFormField).at(2), '123');
@@ -63,7 +61,6 @@ void main() {
     expect(find.text('Use at least 6 characters'), findsOneWidget);
     expect(auth.signUpCalls, 0);
 
-    // Mismatched confirmation.
     await tester.enterText(find.byType(TextFormField).at(1), '123456');
     await tester.enterText(find.byType(TextFormField).at(2), '654321');
     await tester.tap(find.widgetWithText(FilledButton, 'Sign up'));

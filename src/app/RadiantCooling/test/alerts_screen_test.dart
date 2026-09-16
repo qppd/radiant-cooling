@@ -80,18 +80,15 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Both visible.
     expect(find.text('Critical alert'), findsOneWidget);
     expect(find.text('Info alert'), findsOneWidget);
 
-    // Filter to Critical only.
     await tester.tap(find.text('Critical'));
     await tester.pump();
 
     expect(find.text('Critical alert'), findsOneWidget);
     expect(find.text('Info alert'), findsNothing);
 
-    // Filter back to All.
     await tester.tap(find.text('All'));
     await tester.pump();
 

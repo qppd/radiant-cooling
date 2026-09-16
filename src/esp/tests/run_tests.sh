@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Compile and run the ClimateControl unit tests on a host machine.
-# Requires g++ (any POSIX-ish compiler). Works in Git Bash on Windows too.
 set -euo pipefail
 cd "$(dirname "$0")"
 

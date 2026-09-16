@@ -126,7 +126,6 @@ void main() {
   testWidgets('password visibility toggle works', (tester) async {
     await pumpRegister(tester, FakeAuthService());
 
-    // Password field starts obscured — check the underlying TextField.
     final passwordField = tester.widget<TextField>(
       find.descendant(
         of: find.byType(TextFormField).at(1),
@@ -135,7 +134,6 @@ void main() {
     );
     expect(passwordField.obscureText, isTrue);
 
-    // Tap the visibility toggle on the password field.
     await tester.tap(
       find.descendant(
         of: find.byType(TextFormField).at(1),

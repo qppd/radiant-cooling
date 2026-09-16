@@ -24,13 +24,11 @@ void main() {
   testWidgets('validates empty and malformed input', (tester) async {
     await pumpLogin(tester, FakeAuthService());
 
-    // Submit with empty fields.
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pump();
     expect(find.text('Enter your email'), findsOneWidget);
     expect(find.text('Enter a password'), findsOneWidget);
 
-    // Invalid email format.
     await tester.enterText(find.byType(TextFormField).at(0), 'not-an-email');
     await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
     await tester.pump();
@@ -73,7 +71,6 @@ void main() {
   testWidgets('password visibility toggle works', (tester) async {
     await pumpLogin(tester, FakeAuthService());
 
-    // Initially obscured — check the underlying TextField.
     final passwordField = tester.widget<TextField>(
       find.descendant(
         of: find.byType(TextFormField).at(1),
@@ -82,7 +79,6 @@ void main() {
     );
     expect(passwordField.obscureText, isTrue);
 
-    // Tap the visibility toggle.
     await tester.tap(
       find.descendant(
         of: find.byType(TextFormField).at(1),

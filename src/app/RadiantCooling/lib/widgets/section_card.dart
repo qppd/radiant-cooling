@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 
-/// Shared section card used by the Dashboard and Settings screens: an icon
-/// + title header with an optional trailing action, and a body below.
 class SectionCard extends StatelessWidget {
   const SectionCard({
     super.key,

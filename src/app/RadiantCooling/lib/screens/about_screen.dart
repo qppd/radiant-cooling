@@ -6,8 +6,6 @@ import '../services/radiant_firebase.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/section_card.dart';
 
-/// About / system information screen showing app version, linked system
-/// details, hardware summary, and credits.
 class AboutScreen extends StatelessWidget {
   const AboutScreen({
     super.key,
@@ -27,7 +25,6 @@ class AboutScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // App logo + name.
           const Center(child: AppLogo(size: 80)),
           const SizedBox(height: 8),
           Center(
@@ -49,7 +46,6 @@ class AboutScreen extends StatelessWidget {
           ),
           const SizedBox(height: 24),
 
-          // Linked system.
           if (linkedId != null)
             StreamBuilder<Heartbeat>(
               stream: firebase.heartbeatStream(),
@@ -79,7 +75,6 @@ class AboutScreen extends StatelessWidget {
             ),
           const SizedBox(height: 12),
 
-          // Hardware summary.
           SectionCard(
             title: 'Hardware',
             icon: Icons.memory,
@@ -110,7 +105,6 @@ class AboutScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Technology badges.
           SectionCard(
             title: 'Technology',
             icon: Icons.code,
@@ -128,7 +122,6 @@ class AboutScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // Credits.
           SectionCard(
             title: 'Credits',
             icon: Icons.person_outline,
@@ -173,7 +166,6 @@ class AboutScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          // License.
           Center(
             child: Text(
               'MIT License',

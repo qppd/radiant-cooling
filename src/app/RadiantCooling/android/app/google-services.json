@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "65641618071",
+    "firebase_url": "https://radiant-cooling-default-rtdb.firebaseio.com",
+    "project_id": "radiant-cooling",
+    "storage_bucket": "radiant-cooling.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:65641618071:android:19bd41c146886877f927d2",
+        "android_client_info": {
+          "package_name": "com.radiantcooling.radiant_cooling"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCu8uVWtSZvUE9UNCBzDXDvYQp156DxB4M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

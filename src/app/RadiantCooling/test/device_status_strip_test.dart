@@ -40,7 +40,7 @@ void main() {
         ts: 1786119829,
       ),
       chiller: const ChillerTelemetry(waterTempC: 15.0, ts: 1786119829),
-      dh: const DhTelemetry(), // no ts = offline
+      dh: const DhTelemetry(),
     );
 
     await tester.pumpWidget(
@@ -53,7 +53,6 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    // Monitor + Chiller online, Dehumidifier offline.
     final onlineTexts = find.text('Online');
     final offlineTexts = find.text('Offline');
     expect(onlineTexts, findsNWidgets(2));
