@@ -3,7 +3,6 @@ import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
-import '../models/telemetry.dart';
 import '../services/radiant_firebase.dart';
 import '../services/telemetry_logger.dart';
 import '../widgets/section_card.dart';

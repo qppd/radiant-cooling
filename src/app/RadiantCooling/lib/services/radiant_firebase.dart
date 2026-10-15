@@ -13,6 +13,18 @@ class RadiantFirebase {
 
   DatabaseReference get _devicesRef => _db.ref('radiant/devices');
 
+  // Control root for the linked system (writable by the app)
+  DatabaseReference get _controlRef =>
+      _db.ref('radiant/devices/$_linkedId/control');
+
+  String? _linkedId;
+
+  void setLinkedId(String id) {
+    _linkedId = id;
+  }
+
+  DatabaseReference get controlRef => _controlRef;
+
   Future<void> publishWeatherKey(String apiKey) async {
     await _db.ref('radiant/config/weather_key').set(apiKey);
   }
@@ -29,6 +41,20 @@ class RadiantFirebase {
     return snap.exists;
   }
 
+  // ── Control stream writes (the app → firmware path) ───────────────────
+  /// Set pumps on or off via the control stream.
+  Future<void> setPumps(bool on) async {
+    await _controlRef.update({'pumps': on ? 'on' : 'off'});
+  }
+
+  /// Switch between 'auto' and 'manual' mode.
+  Future<void> setMode(String mode) async {
+    assert(mode == 'auto' || mode == 'manual');
+    await _controlRef.update({'mode': mode});
+  }
+
+  // ── Reads ──────────────────────────────────────────────────────────────
+
   DatabaseReference telemetry(String device) =>
       _db.ref('radiant/telemetry/$device/latest');
 
@@ -36,48 +62,32 @@ class RadiantFirebase {
 
   DatabaseReference heartbeat() => _db.ref('radiant/heartbeat/monitor');
 
+  // Each call returns a NEW stream — FirebaseDatabase.onValue streams are
+  // single-subscription, and the dashboard listens in several StreamBuilders.
 
-  late final Stream<MonitorTelemetry> _monitorStream = telemetry(
-    'monitor',
-  ).onValue.map((e) => MonitorTelemetry.fromMap(_map(e)));
+  Stream<MonitorTelemetry> monitorStream() =>
+      telemetry('monitor').onValue.map((e) => MonitorTelemetry.fromMap(_map(e)));
 
-  late final Stream<ChillerTelemetry> _chillerStream = telemetry(
-    'chiller',
-  ).onValue.map((e) => ChillerTelemetry.fromMap(_map(e)));
+  Stream<ChillerTelemetry> chillerStream() =>
+      telemetry('chiller').onValue.map((e) => ChillerTelemetry.fromMap(_map(e)));
 
-  late final Stream<DhTelemetry> _dhStream = telemetry(
-    'dh',
-  ).onValue.map((e) => DhTelemetry.fromMap(_map(e)));
+  Stream<DhTelemetry> dhStream() =>
+      telemetry('dh').onValue.map((e) => DhTelemetry.fromMap(_map(e)));
 
-  late final Stream<DhState> _dhStateStream = stateOf(
-    'dh',
-  ).onValue.map((e) => DhState.fromMap(_map(e)));
+  Stream<DhState> dhStateStream() =>
+      stateOf('dh').onValue.map((e) => DhState.fromMap(_map(e)));
 
-  late final Stream<ChillerState> _chillerStateStream = stateOf(
-    'chiller',
-  ).onValue.map((e) => ChillerState.fromMap(_map(e)));
+  Stream<ChillerState> chillerStateStream() =>
+      stateOf('chiller').onValue.map((e) => ChillerState.fromMap(_map(e)));
 
-  late final Stream<Heartbeat> _heartbeatStream = heartbeat().onValue.map(
-    (e) => Heartbeat.fromMap(_map(e)),
-  );
+  Stream<Heartbeat> heartbeatStream() =>
+      heartbeat().onValue.map((e) => Heartbeat.fromMap(_map(e)));
 
-  late final Stream<ControlParams> _controlParamsStream = configControlRef
-      .onValue
-      .map((e) => ControlParams.fromMap(_map(e)));
+  Stream<ControlParams> controlParamsStream() =>
+      configControlRef.onValue.map((e) => ControlParams.fromMap(_map(e)));
 
-  late final Stream<DhConfig> _dhConfigStream = configDhRef.onValue.map(
-    (e) => DhConfig.fromMap(_map(e)),
-  );
-
-  Stream<MonitorTelemetry> monitorStream() => _monitorStream;
-  Stream<ChillerTelemetry> chillerStream() => _chillerStream;
-  Stream<DhTelemetry> dhStream() => _dhStream;
-  Stream<DhState> dhStateStream() => _dhStateStream;
-  Stream<ChillerState> chillerStateStream() => _chillerStateStream;
-  Stream<Heartbeat> heartbeatStream() => _heartbeatStream;
-  Stream<ControlParams> controlParamsStream() => _controlParamsStream;
-  Stream<DhConfig> dhConfigStream() => _dhConfigStream;
-
+  Stream<DhConfig> dhConfigStream() =>
+      configDhRef.onValue.map((e) => DhConfig.fromMap(_map(e)));
 
   DatabaseReference get configControlRef =>
       _db.ref('radiant/config/control/params');
@@ -133,10 +143,10 @@ class ControlParams {
   final double weatherCoolTempC;
 
   factory ControlParams.fromMap(Map<dynamic, dynamic>? m) => ControlParams(
-    comfortSetpointC: _num(m, 'comfort_setpoint_c') ?? 24,
-    dewpointMarginC: _num(m, 'dewpoint_margin_c') ?? 2,
-    weatherCoolTempC: _num(m, 'weather_cool_temp_c') ?? 28,
-  );
+        comfortSetpointC: _num(m, 'comfort_setpoint_c') ?? 24,
+        dewpointMarginC: _num(m, 'dewpoint_margin_c') ?? 2,
+        weatherCoolTempC: _num(m, 'weather_cool_temp_c') ?? 28,
+      );
 }
 
 class DhConfig {
@@ -145,7 +155,7 @@ class DhConfig {
   final double humiditySetpointPct;
   final double humidityDeadbandPct;
   factory DhConfig.fromMap(Map<dynamic, dynamic>? m) => DhConfig(
-    humiditySetpointPct: _num(m, 'humidity_setpoint_pct') ?? 55,
-    humidityDeadbandPct: _num(m, 'humidity_deadband_pct') ?? 5,
-  );
+        humiditySetpointPct: _num(m, 'humidity_setpoint_pct') ?? 55,
+        humidityDeadbandPct: _num(m, 'humidity_deadband_pct') ?? 5,
+      );
 }

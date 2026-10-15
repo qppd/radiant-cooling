@@ -32,12 +32,6 @@ class _AlertsScreenState extends State<AlertsScreen> {
     });
   }
 
-  Future<void> _clearAll() async {
-    await widget.alertService.clear();
-    if (!mounted) return;
-    setState(() => _alerts = const []);
-  }
-
   List<Alert> get _filtered {
     if (_filter == null) return _alerts;
     return [for (final a in _alerts) if (a.severity == _filter) a];

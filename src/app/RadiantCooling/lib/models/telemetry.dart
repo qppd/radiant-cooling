@@ -31,6 +31,7 @@ class MonitorTelemetry {
     this.dewPointC,
     this.waterFloorC,
     this.pumpsOn = false,
+    this.mode,
     this.ts,
   });
 
@@ -47,6 +48,10 @@ class MonitorTelemetry {
   final double? dewPointC;
   final double? waterFloorC;
   final bool pumpsOn;
+
+  /// 'auto' or 'manual'; null before the gateway has reported any mode.
+  final String? mode;
+
   final int? ts;
 
   factory MonitorTelemetry.fromMap(Map<dynamic, dynamic>? m) =>
@@ -62,6 +67,7 @@ class MonitorTelemetry {
         dewPointC: _num(m, 'dew_point_c'),
         waterFloorC: _num(m, 'water_floor_c'),
         pumpsOn: _flag(m, 'pumps', 'on'),
+        mode: m?['mode'] as String?,
         ts: m?['ts'] is int ? m!['ts'] as int : null,
       );
 }
@@ -96,10 +102,10 @@ class DhTelemetry {
   final int? ts;
 
   factory DhTelemetry.fromMap(Map<dynamic, dynamic>? m) => DhTelemetry(
-    tempC: _num(m, 'temp_c'),
-    humidityPct: _num(m, 'humidity_pct'),
-    ts: m?['ts'] is int ? m!['ts'] as int : null,
-  );
+        tempC: _num(m, 'temp_c'),
+        humidityPct: _num(m, 'humidity_pct'),
+        ts: m?['ts'] is int ? m!['ts'] as int : null,
+      );
 }
 
 class DhState {
@@ -118,9 +124,9 @@ class ChillerState {
   final bool pump2On;
 
   factory ChillerState.fromMap(Map<dynamic, dynamic>? m) => ChillerState(
-    pump1On: _flag(m, 'pump1', 'on'),
-    pump2On: _flag(m, 'pump2', 'on'),
-  );
+        pump1On: _flag(m, 'pump1', 'on'),
+        pump2On: _flag(m, 'pump2', 'on'),
+      );
 }
 
 class Heartbeat {
@@ -131,8 +137,8 @@ class Heartbeat {
   final int? ts;
 
   factory Heartbeat.fromMap(Map<dynamic, dynamic>? m) => Heartbeat(
-    online: m?['online'] == true,
-    deviceId: m?['device_id'] as String?,
-    ts: m?['ts'] is int ? m!['ts'] as int : null,
-  );
+        online: m?['online'] == true,
+        deviceId: m?['device_id'] as String?,
+        ts: m?['ts'] is int ? m!['ts'] as int : null,
+      );
 }

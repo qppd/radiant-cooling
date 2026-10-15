@@ -14,7 +14,6 @@ class AlertService {
 
   bool? _prevGatewayOnline;
   double? _prevColdestPipeC;
-  double? _prevWaterFloorC;
 
   Future<File> _getFile() async {
     if (_file != null) return _file!;
@@ -65,7 +64,6 @@ class AlertService {
     }
 
     _prevColdestPipeC = coldestPipeC;
-    _prevWaterFloorC = waterFloorC;
   }
 
   void processWeather({required bool valid}) {
@@ -124,7 +122,6 @@ class AlertService {
   Future<void> clear() async {
     _prevGatewayOnline = null;
     _prevColdestPipeC = null;
-    _prevWaterFloorC = null;
     final file = await _getFile();
     if (await file.exists()) await file.delete();
   }
@@ -132,6 +129,5 @@ class AlertService {
   void resetState() {
     _prevGatewayOnline = null;
     _prevColdestPipeC = null;
-    _prevWaterFloorC = null;
   }
 }

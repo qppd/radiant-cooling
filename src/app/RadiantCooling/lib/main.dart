@@ -12,7 +12,6 @@ import 'screens/link_device_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/notification_settings_screen.dart';
 import 'screens/onboarding_screen.dart';
-import 'screens/register_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/trends_screen.dart';
 import 'models/telemetry.dart';
