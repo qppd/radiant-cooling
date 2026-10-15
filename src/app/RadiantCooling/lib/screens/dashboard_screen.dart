@@ -124,36 +124,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Cooling loop',
+            title: 'Tank temps (WaterChiller)',
             icon: Icons.water_drop_outlined,
-            child: StreamBuilder<MonitorTelemetry>(
-              stream: widget.firebase.monitorStream(),
-              builder: (context, snap) {
-                final t = snap.data;
-                return StreamBuilder<ChillerTelemetry>(
-                  stream: widget.firebase.chillerStream(),
-                  builder: (context, csnap) {
-                    final ch = csnap.data;
-                    return _MetricRow(
-                      children: [
-                        _Metric(label: 'Supply', value: _fmt(t?.supplyC)),
-                        _Metric(label: 'Return', value: _fmt(t?.returnC)),
-                        _Metric(label: 'ΔT', value: _fmt(t?.deltaTC)),
-                        _Metric(
-                          label: 'Coldest pipe',
-                          value: _fmt(t?.coldestPipeC),
-                        ),
-                        _Metric(label: 'Tank', value: _fmt(ch?.waterTempC)),
-                      ],
-                    );
-                  },
+            child: StreamBuilder<ChillerTelemetry>(
+              stream: widget.firebase.chillerStream(),
+              builder: (context, csnap) {
+                final ch = csnap.data;
+                return _MetricRow(
+                  children: [
+                    _Metric(label: 'Outlet', value: _fmt(ch?.outgoingTempC)),
+                    _Metric(label: 'Inlet', value: _fmt(ch?.ingoingTempC)),
+                    _Metric(label: 'Coldest', value: _fmt(ch?.waterTempC)),
+                  ],
                 );
               },
             ),
           ),
           const SizedBox(height: 12),
           SectionCard(
-            title: 'Pipe sensors (DS18B20)',
+            title: 'Pipe sensors (Ceiling DS18B20)',
             icon: Icons.sensors,
             child: StreamBuilder<MonitorTelemetry>(
               stream: widget.firebase.monitorStream(),
@@ -167,8 +156,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   );
                 }
                 const labels = [
-                  'Supply',
-                  'Return',
                   'Pipe 1',
                   'Pipe 2',
                   'Pipe 3',
@@ -272,12 +259,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     return Column(
                                       children: [
                                         _StatusTile(
-                                            label: 'Chiller pump 1',
-                                            on: s?.pump1On ?? false),
+                                            label: 'Compressor',
+                                            on: s?.compressorOn ?? false),
                                         const SizedBox(height: 8),
                                         _StatusTile(
-                                            label: 'Chiller pump 2',
-                                            on: s?.pump2On ?? false),
+                                            label: 'Water pump',
+                                            on: s?.pump1On ?? false),
                                         const SizedBox(height: 8),
                                         _StatusTile(
                                             label: 'Dehumidifier',

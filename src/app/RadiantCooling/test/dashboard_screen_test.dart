@@ -56,7 +56,7 @@ void main() {
       chiller: const ChillerTelemetry(waterTempC: 12.4),
       dh: const DhTelemetry(tempC: 26.0, humidityPct: 55),
       dhState: const DhState(on: true),
-      chillerState: const ChillerState(pump1On: true, pump2On: false),
+      chillerState: const ChillerState(pump1On: true, compressorOn: false),
     );
     await pumpDashboard(tester, firebase);
 

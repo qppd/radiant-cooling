@@ -114,7 +114,7 @@ void main() {
       chiller: const ChillerTelemetry(waterTempC: 6.8),
       dh: const DhTelemetry(tempC: 27.4, humidityPct: 68),
       dhState: const DhState(on: true),
-      chillerState: const ChillerState(pump1On: true, pump2On: true),
+      chillerState: const ChillerState(pump1On: true, compressorOn: true),
       controlParams: const ControlParams(),
     );
     await _pumpApp(

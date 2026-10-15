@@ -83,15 +83,15 @@ class AboutScreen extends StatelessWidget {
                 _DeviceTile(
                   name: 'RadiantCoolingMonitor',
                   role: 'Gateway',
-                  sensors: '6× DS18B20 (pipe temps)',
+                  sensors: '4× DS18B20 (ceiling pipe temps)',
                   actuators: '—',
                 ),
                 const Divider(),
                 _DeviceTile(
                   name: 'WaterChillerController',
                   role: 'Peer',
-                  sensors: '3× DS18B20 (water temps)',
-                  actuators: '2× SSR → water pumps',
+                  sensors: '2× DS18B20 (tank: outlet + inlet)',
+                  actuators: '1× SSR → compressor, 1× Relay → pump',
                 ),
                 const Divider(),
                 _DeviceTile(

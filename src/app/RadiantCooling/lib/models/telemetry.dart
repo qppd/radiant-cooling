@@ -74,22 +74,28 @@ class MonitorTelemetry {
 
 class ChillerTelemetry {
   const ChillerTelemetry({
+    this.outgoingTempC,
+    this.ingoingTempC,
     this.waterTempC,
+    this.compressorOn = false,
     this.pump1On = false,
-    this.pump2On = false,
     this.ts,
   });
 
+  final double? outgoingTempC;
+  final double? ingoingTempC;
   final double? waterTempC;
+  final bool compressorOn;
   final bool pump1On;
-  final bool pump2On;
   final int? ts;
 
   factory ChillerTelemetry.fromMap(Map<dynamic, dynamic>? m) =>
       ChillerTelemetry(
+        outgoingTempC: _num(m, 'outgoing_temp_c'),
+        ingoingTempC: _num(m, 'ingoing_temp_c'),
         waterTempC: _num(m, 'water_temp_c'),
+        compressorOn: _flag(m, 'compressor', 'on'),
         pump1On: _flag(m, 'pump1', 'on'),
-        pump2On: _flag(m, 'pump2', 'on'),
         ts: m?['ts'] is int ? m!['ts'] as int : null,
       );
 }
@@ -118,14 +124,14 @@ class DhState {
 }
 
 class ChillerState {
-  const ChillerState({this.pump1On = false, this.pump2On = false});
+  const ChillerState({this.compressorOn = false, this.pump1On = false});
 
+  final bool compressorOn;
   final bool pump1On;
-  final bool pump2On;
 
   factory ChillerState.fromMap(Map<dynamic, dynamic>? m) => ChillerState(
+        compressorOn: _flag(m, 'compressor', 'on'),
         pump1On: _flag(m, 'pump1', 'on'),
-        pump2On: _flag(m, 'pump2', 'on'),
       );
 }
 
