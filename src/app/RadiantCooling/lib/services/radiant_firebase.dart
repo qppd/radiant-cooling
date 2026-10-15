@@ -62,32 +62,41 @@ class RadiantFirebase {
 
   DatabaseReference heartbeat() => _db.ref('radiant/heartbeat/monitor');
 
-  // Each call returns a NEW stream — FirebaseDatabase.onValue streams are
-  // single-subscription, and the dashboard listens in several StreamBuilders.
+  // Each call returns a broadcast stream — FirebaseDatabase.onValue streams are
+  // single-subscription by default, but the dashboard uses multiple StreamBuilders
+  // and main.dart also listens directly. .asBroadcastStream() lets many subscribers.
 
   Stream<MonitorTelemetry> monitorStream() =>
-      telemetry('monitor').onValue.map((e) => MonitorTelemetry.fromMap(_map(e)));
+      telemetry('monitor').onValue.map((e) => MonitorTelemetry.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<ChillerTelemetry> chillerStream() =>
-      telemetry('chiller').onValue.map((e) => ChillerTelemetry.fromMap(_map(e)));
+      telemetry('chiller').onValue.map((e) => ChillerTelemetry.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<DhTelemetry> dhStream() =>
-      telemetry('dh').onValue.map((e) => DhTelemetry.fromMap(_map(e)));
+      telemetry('dh').onValue.map((e) => DhTelemetry.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<DhState> dhStateStream() =>
-      stateOf('dh').onValue.map((e) => DhState.fromMap(_map(e)));
+      stateOf('dh').onValue.map((e) => DhState.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<ChillerState> chillerStateStream() =>
-      stateOf('chiller').onValue.map((e) => ChillerState.fromMap(_map(e)));
+      stateOf('chiller').onValue.map((e) => ChillerState.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<Heartbeat> heartbeatStream() =>
-      heartbeat().onValue.map((e) => Heartbeat.fromMap(_map(e)));
+      heartbeat().onValue.map((e) => Heartbeat.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<ControlParams> controlParamsStream() =>
-      configControlRef.onValue.map((e) => ControlParams.fromMap(_map(e)));
+      configControlRef.onValue.map((e) => ControlParams.fromMap(_map(e)))
+          .asBroadcastStream();
 
   Stream<DhConfig> dhConfigStream() =>
-      configDhRef.onValue.map((e) => DhConfig.fromMap(_map(e)));
+      configDhRef.onValue.map((e) => DhConfig.fromMap(_map(e)))
+          .asBroadcastStream();
 
   DatabaseReference get configControlRef =>
       _db.ref('radiant/config/control/params');
