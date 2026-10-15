@@ -8,8 +8,8 @@
 
 | Board                        | Sensors                              | Actuators (SSR)              | Role     |
 | ---------------------------- | ------------------------------------ | ---------------------------- | -------- |
-| `RadiantCoolingMonitor`      | 6x DS18B20 (1-Wire)                  | —                            | Gateway  |
-| `WaterChillerController`     | 1x DS18B20                           | 2x SSR → 2 water pumps       | Peer     |
+| `RadiantCoolingMonitor`      | 4x DS18B20 ceiling (one 1-Wire bus each) | —                     | Gateway  |
+| `WaterChillerController`     | 2x DS18B20 tank (out/in)     | 2x SSR → compressor + pump  | Peer     |
 | `DehumidifierController`     | 1x DHT22 (temp + humidity)           | 1x SSR → dehumidifier        | Peer     |
 
 ## Diagram
@@ -29,8 +29,8 @@ flowchart LR
     end
 
     subgraph SEN["Sensors"]
-        T6["6x DS18B20<br/>(supply/return + pipes)"]
-        T1["1x DS18B20<br/>(water temp)"]
+        T6["4x DS18B20<br/>(ceiling pipes)"]
+        T1["2x DS18B20<br/>(tank out / in)"]
         DHT["1x DHT22<br/>(temp + humidity)"]
     end
 
@@ -39,8 +39,8 @@ flowchart LR
     end
 
     subgraph ACT["Actuators (SSR)"]
-        P1["Water Pump 1"]
-        P2["Water Pump 2"]
+        P1["Compressor"]
+        P2["Water Pump"]
         DHU["Dehumidifier"]
     end
 
@@ -61,7 +61,7 @@ flowchart LR
     GW <-->|"ESP-NOW"| DHC
 
     GW ---|"1-Wire"| T6
-    GW ---|"GPIO 33"| RESET
+    GW ---|"GPIO 25"| RESET
     WCC ---|"1-Wire"| T1
     DHC ---|"DHT"| DHT
 
@@ -78,7 +78,7 @@ flowchart LR
 
 1. Each board reads its own sensors.
 2. Peers send `telemetry`/`state` to the gateway over ESP-NOW.
-3. The gateway combines its 6x DS18B20 readings with peer data and writes
+3. The gateway combines its 4x DS18B20 readings with peer data and writes
    everything to Firebase (`radiant/telemetry/...`).
 4. The app reads from Firebase via the SDK.
 
@@ -86,14 +86,14 @@ flowchart LR
 
 | Block                    | Role                | Description                                          |
 | ------------------------ | ------------------- | ---------------------------------------------------- |
-| `RadiantCoolingMonitor`  | **Gateway**         | Wi-Fi + Firebase + ESP-NOW; reads 6x DS18B20         |
-| `WaterChillerController` | ESP-NOW peer        | Reads 1x DS18B20; controls 2 water pumps via 2 SSRs  |
+| `RadiantCoolingMonitor`  | **Gateway**         | Wi-Fi + Firebase + ESP-NOW; reads 4x ceiling DS18B20 |
+| `WaterChillerController` | ESP-NOW peer        | Reads 2x DS18B20 (tank); controls compressor + pump via 2 SSRs |
 | `DehumidifierController` | ESP-NOW peer        | Reads 1x DHT22; controls dehumidifier via 1 SSR      |
-| 6x DS18B20               | Sensor              | Water supply/return + 4 pipe temps above the ceiling (monitor) |
-| 1x DS18B20               | Sensor              | Chiller loop water temperature                       |
+| 4x DS18B20               | Sensor              | Ceiling pipe temps (monitor), one 1-Wire bus each    |
+| 2x DS18B20               | Sensor              | Chiller tank water: outgoing + ingoing                |
 | 1x DHT22                 | Sensor              | Temperature + humidity for dew-point control         |
-| WiFi reset button        | Control             | GPIO 33 → GND; hold 3 s to erase WiFi credentials    |
-| Water pumps (2)          | Actuator            | Circulate chilled water (SSR-controlled)             |
+| WiFi reset button        | Control             | GPIO 25 → GND; hold 3 s to erase WiFi credentials    |
+| Compressor + pump        | Actuator            | Circulate chilled water (SSR-controlled)             |
 | Dehumidifier             | Actuator            | Removes humidity (SSR-controlled)                    |
 | Power supplies (3)       | Power               | One 220V→5V/3A supply per board (isolated)           |
 | Firebase RTDB            | Cloud               | Shared database for app and firmware                 |

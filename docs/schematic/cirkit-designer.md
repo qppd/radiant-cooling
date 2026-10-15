@@ -20,8 +20,8 @@ layout in [`pin-map.md`](pin-map.md) and
 
 | Board                        | Components in the schematic                          |
 | ---------------------------- | ---------------------------------------------------- |
-| `RadiantCoolingMonitor`      | ESP32 (gateway) + 6× DS18B20 on one 1-Wire bus       |
-| `WaterChillerController`     | ESP32 (peer) + 1× DS18B20 (tank) + 2× SSR → pumps    |
+| `RadiantCoolingMonitor`      | ESP32 (gateway) + 4× DS18B20 (one 1-Wire bus each) + WiFi reset button |
+| `WaterChillerController`     | ESP32 (peer) + 2× DS18B20 (tank out/in) + 2× SSR → compressor + pump |
 | `DehumidifierController`     | ESP32 (peer) + 1× DHT22 + 1× SSR → dehumidifier      |
 
 Each board sits on its own breadboard; the three are wired independently
@@ -31,21 +31,23 @@ the schematic.
 
 ## Sensor placement (physical installation)
 
-- **6× DS18B20 (gateway, monitor)** — mounted on the chilled-water pipes
-  **above the ceiling**: water **supply**, water **return**, and **4 pipe
-  temperatures** along the run. All six share one 1-Wire bus (GPIO 18) with
-  a 4.7 kΩ pull-up to 3V3.
-- **1× DS18B20 (chiller)** — water temperature on the chiller tank (GPIO 22,
-  4.7 kΩ pull-up). Feeds `water_temp_c` telemetry and the chiller fail-safe.
+- **4× DS18B20 (gateway, monitor)** — ceiling sensors mounted on the pipes
+  with a 3D-printed mount for a 1/2 inch PVC T-connector. Each sensor has
+  its **own 1-Wire bus**: GPIO 23, 21, 18 and 19 (one 4.7 kΩ pull-up to 3V3
+  per bus). Sensors 1-2 feed the supply/return telemetry.
+- **2× DS18B20 (chiller)** — tank water temperature: **outgoing** water
+  leaving the tank (GPIO 5) and **ingoing** water returning to the tank
+  (GPIO 18). Feed `outgoing_temp_c`/`ingoing_temp_c` telemetry, the
+  `water_temp_c` value (coldest of the two) and the chiller fail-safe.
 - **1× DHT22 (dehumidifier)** — indoor temperature + relative humidity
-  (GPIO 32, 10 kΩ pull-up). The only humidity source → indoor dew point for
+  (GPIO 25, 10 kΩ pull-up). The only humidity source → indoor dew point for
   the anti-condensation floor.
 
 ## Wiring notes
 
-- **1-Wire (DS18B20):** one data line for all sensors on a board; 4.7 kΩ
-  pull-up from the data line to 3V3. Use external 3V3 supply, not parasite
-  power.
+- **1-Wire (DS18B20):** each sensor in this project has its own data line
+  (one sensor per GPIO); 4.7 kΩ pull-up from each data line to 3V3. Use an
+  external 3V3 supply, not parasite power.
 - **DHT22:** 10 kΩ pull-up on the data line.
 - **SSR modules:** 3–32 V DC input — drive directly from a 3.3 V GPIO;
   buffer with a transistor/MOSFET if the module needs more drive. Always
@@ -53,7 +55,7 @@ the schematic.
   the board.
 - **Power:** each board fed by its own **220 V AC → 5 V DC, 3 A** supply into
   `5V`/`VIN`. No shared rail between boards.
-- **WiFi reset button (gateway):** GPIO 33 → GND, momentary; hold 3 s to
+- **WiFi reset button (gateway):** GPIO 25 → GND, momentary; hold 3 s to
   erase WiFi credentials.
 
 See [`pin-map.md`](pin-map.md) for the full pin-by-pin rationale (boot,

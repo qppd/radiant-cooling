@@ -8,8 +8,8 @@ only (wiring + control logic).
 
 | Folder                     | Hardware                                                     | Role     |
 | -------------------------- | ------------------------------------------------------------ | -------- |
-| `RadiantCoolingMonitor/`   | 6x DS18B20 (1-Wire): supply/return + 4 pipe temps              | Gateway  |
-| `WaterChillerController/`  | 3x DS18B20 adapter, compressor SSR, 2-channel pump relay     | Peer     |
+| `RadiantCoolingMonitor/`   | 4x DS18B20 ceiling sensors (one 1-Wire bus each: 23/21/18/19) + WiFi reset button (25) | Gateway  |
+| `WaterChillerController/`  | 2x DS18B20 tank sensors (out=5, in=18), compressor SSR (23), pump relay (19) | Peer     |
 | `DehumidifierController/`  | DHT22 (GPIO25), 1x SSR (GPIO23) -> dehumidifier          | Peer     |
 
 ## Module layout (same pattern in every sketch folder)
@@ -44,7 +44,7 @@ Each board only includes the modules it needs:
 
 | Module               | Monitor (gateway) | Chiller | Dehumidifier |
 | -------------------- | :---------------: | :------: | :----------: |
-| `TemperatureSensor`  | Yes (6x)          | Yes (1x) | —            |
+| `TemperatureSensor`  | Yes (4x)          | Yes (2x) | —            |
 | `HumiditySensor`     | —                 | —        | Yes          |
 | `SsrOutput`          | —                 | Yes (×2) | Yes          |
 | `WifiProvisioner`    | Yes               | —        | —            |
@@ -86,7 +86,7 @@ the indoor dew point.
 
 WiFi credentials are **not** stored in code — they are entered once through
 the WiFiManager captive portal (AP `RadiantCooling-AP`). Hold the gateway's
-reset button (GPIO 33, see `PINS_CONFIG.h`) for ~3 s to erase them and
+reset button (GPIO 25, see `PINS_CONFIG.h`) for ~3 s to erase them and
 re-provision.
 
 Firebase is **two-way** on the gateway (Mobizt `FirebaseClient`, async):
@@ -105,7 +105,8 @@ email/password (not anonymous) when those rules are used.
 - **ESP-NOW receive** on every board is decoupled through a FreeRTOS queue:
   the callback only enqueues raw bytes; `loop()` drains, decodes
   (`JsonProtocol`), and applies/handles the message.
-- **Gateway** reads supply/return + pipe temperatures (6x DS18B20), caches
+- **Gateway** reads the 4 ceiling pipe temperatures (4x DS18B20, one 1-Wire
+  bus each: sensors 1-2 feed the supply/return telemetry), caches
   the latest peer readings for the chiller computation, forwards peer
   `telemetry`/`state` to Firebase, publishes its own telemetry + a retained
   heartbeat (`radiant/heartbeat/monitor`, includes the Wi-Fi channel), sends
@@ -119,6 +120,44 @@ email/password (not anonymous) when those rules are used.
   (`set_humidity_target`, `enable`/`disable`, `reset`), runs the 55 %%RH
   hysteresis loop, and streams `temp_c`/`humidity_pct` telemetry. After 3
   consecutive sensor read failures it fails safe (dehumidifier off).
+
+## Serial test console (manual component testing)
+
+`RadiantCoolingMonitor.ino`, `WaterChillerController.ino` and
+`DehumidifierController.ino` have a small
+test console built on `Serial.readStringUntil('\n')` + an `if / else if`
+command chain, polled at the top of `loop()`. Open the Serial Monitor at
+**115200 baud** with the **Newline** line ending, then type `help`:
+
+| Command | Board | What it exercises |
+| ------- | ----- | ----------------- |
+| `temps`, `temp <0-3>` | monitor | the 4 ceiling DS18B20 sensors, one bus each (GPIO 23 / 21 / 18 / 19; DISCONNECTED / 85 °C / out-of-range diagnostics) |
+| `button`, `button test` | monitor | WiFi reset button (GPIO 25): one-shot read, or a 10 s press/release edge watch |
+| `wifi` | monitor | WiFi link (SSID / IP / RSSI / MAC) |
+| `wx` | monitor | WeatherAPI fetch on demand (updates the cached outdoor inputs) |
+| `mode manual\|auto` | monitor | suspend/resume auto pump control |
+| `pumps on\|off` | monitor | ESP-NOW TX to the chiller (`set_pumps`) |
+| `espnow chiller\|dh` | monitor | ESP-NOW ping (`cmd: ping`) - peers log `unknown cmd: ping` on arrival; TX result prints as `[espnow] tx OK -> ..` |
+| `status`, `reboot` | monitor | dump current inputs/control state, restart |
+| `temps`, `temp outgoing\|ingoing` | chiller | both tank DS18B20 sensors (out=GPIO 5, in=GPIO 18) with DISCONNECTED / 85 °C / out-of-range diagnostics |
+| `ssr` | chiller | compressor + pump relay output states (GPIO 23 / 19) |
+| `compressor on\|off\|toggle` | chiller | compressor SSR (GPIO 23) by hand |
+| `pump1 on\|off\|toggle` | chiller | the pump relay (GPIO 19) by hand |
+| `outputs on\|off` | chiller | compressor + pump together via `setPumps()` - also sends a `state` frame to the gateway |
+| `espnow` | chiller | status frame to the gateway (link test) |
+| `status`, `reboot` | chiller | fresh sensor read + output states, restart |
+| `dht`, `dht test` | dehumidifier | DHT22 single read, or 5 samples 2 s apart (stability) |
+| `ssr`, `ssr on\|off\|toggle` | dehumidifier | SSR output (GPIO 23) state and manual drive |
+| `setpoint <0-100>`, `deadband <0-30>` | dehumidifier | humidity hysteresis thresholds by hand |
+| `enable`, `disable` | dehumidifier | `disable` forces the SSR off so `ssr on/off` tests are not overridden by the control loop |
+| `espnow` | dehumidifier | status frame to the gateway (link test) |
+| `status`, `reboot` | dehumidifier | dump current state, restart |
+
+There is no button on the chiller or dehumidifier boards (`PINS_CONFIG.h`
+only defines the sensor/output pins) - the monitor's WiFi reset button is
+the only one. Type an unknown command to get a reminder of the
+list; the console never mutates Firebase, only local state and the
+peer-facing commands listed above.
 
 ## Unit tests
 

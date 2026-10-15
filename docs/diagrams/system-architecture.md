@@ -38,7 +38,7 @@ flowchart TB
     end
 
     subgraph PLANT["Plant Layer (HVAC)"]
-        T6["6x DS18B20<br/>(1-Wire)"]
+        T6["4x DS18B20<br/>(1-Wire, one bus each)"]
         T1["1x DS18B20<br/>(water temp)"]
         DHT["DHT22<br/>(temp + humidity)"]
         P1["Water Pump 1"]

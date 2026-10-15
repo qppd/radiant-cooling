@@ -12,7 +12,7 @@ The three boards are split into two roles: the **gateway** (`RadiantCoolingMonit
 ```mermaid
 flowchart TD
     A["Start"] --> B["Init sensors, ESP-NOW peers, Wi-Fi + Firebase"]
-    B --> C["Read local 6x DS18B20 sensors"]
+    B --> C["Read local DS18B20 sensors"]
     C --> D["Drain ESP-NOW queue (peer telemetry)"]
     D --> E["Fetch weather (throttled: WEATHER_POLL_S)"]
     E --> F["Compute pump decision - weather + sensors + dew point"]

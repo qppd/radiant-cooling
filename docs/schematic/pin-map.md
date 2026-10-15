@@ -15,34 +15,36 @@
 
 | Pins        | Why                                                             |
 | ----------- | --------------------------------------------------------------- |
-| `0`, `2`, `5`, `12`, `15` | **Strapping pins** — sampled at reset to select boot mode. GPIO12 high at boot forces 1.8V flash → boot failure. GPIO2 often drives the onboard LED. |
+| `0`, `2`, `5`, `12`, `15` | **Strapping pins** — sampled at reset to select boot mode. GPIO12 high at boot forces 1.8V flash → boot failure. GPIO2 often drives the onboard LED. **GPIO5** only selects SDIO timing (not used — we boot from flash); the chiller's outgoing DS18B20 sits on it with a 4.7 kΩ pull-up to 3V3, which holds it at its default HIGH at boot, so it is safe there. |
 | `6`–`11`    | **SPI flash** — wired to the internal flash chip. Never use; breaks boot. |
 | `1`, `3`    | **UART0** — USB programming + Serial Monitor.                   |
-| `0, 2, 4, 12, 13, 14, 15, 25, 26, 27` | **ADC2** — `analogRead()` fails while Wi-Fi is active (and we always run Wi-Fi/ESP-NOW). Avoid entirely. |
+| `0, 2, 4, 12, 13, 14, 15, 25, 26, 27` | **ADC2** — `analogRead()` fails while Wi-Fi is active (and we always run Wi-Fi/ESP-NOW). Avoid for analog reads; plain digital I/O (e.g. the gateway's reset button on GPIO25) is fine. |
 | `34`–`39`   | **Input-only** — no output capability. Fine for inputs only.     |
 
 ## Digital-safe pool (used by this project)
 
-`18`, `19`, `21`, `22`, `23`, `32`, `33`
+`5`, `18`, `19`, `21`, `22`, `23`, `25`, `32`, `33`
 
-These are neither strapping, flash, UART0, nor ADC2 pins — safe for digital
-I/O with Wi-Fi and ESP-NOW running.
+These are neither flash nor UART0 pins — safe for digital I/O with Wi-Fi and
+ESP-NOW running (GPIO5 is strapping but held at its default by the sensor
+pull-up; GPIO25 is ADC2 but only used as a digital input).
 
 ## Per-board assignments
 
 | Board                   | Pin | Component                          | Notes                        |
 | ----------------------- | --- | ---------------------------------- | ---------------------------- |
-| `RadiantCoolingMonitor` | 18  | 1-Wire bus (6x DS18B20)            | 4.7kΩ pull-up to 3V3         |
-| `RadiantCoolingMonitor` | 33  | WiFi reset button                   | momentary switch to GND, INPUT_PULLUP; hold 3 s to erase WiFi credentials |
-| `WaterChillerController`| 18  | SSR → compressor                   | SSR input (see wiring note)  |
-| `WaterChillerController`| 19  | DS18B20 adapter → tank temperature | DAT; check adapter pull-up   |
-| `WaterChillerController`| 21  | 2-channel relay IN1 → water-in pump | Relay input (see wiring note) |
-| `WaterChillerController`| 22  | 2-channel relay IN2 → water-out pump | Relay input (see wiring note) |
-| `WaterChillerController`| 23  | DS18B20 adapter → ingoing water    | DAT; check adapter pull-up   |
-| `WaterChillerController`| 32  | DS18B20 adapter → outgoing water   | DAT; check adapter pull-up   |
+| `RadiantCoolingMonitor` | 23  | DS18B20 ceiling sensor 1           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
+| `RadiantCoolingMonitor` | 21  | DS18B20 ceiling sensor 2           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
+| `RadiantCoolingMonitor` | 18  | DS18B20 ceiling sensor 3           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
+| `RadiantCoolingMonitor` | 19  | DS18B20 ceiling sensor 4           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
+| `RadiantCoolingMonitor` | 25  | WiFi reset button                   | momentary switch to GND, INPUT_PULLUP; hold 3 s to erase WiFi credentials |
+| `WaterChillerController`| 23  | SSR → compressor                    | SSR input (see wiring note)  |
+| `WaterChillerController`| 19  | Relay IN → water pump               | Relay input (see wiring note)|
+| `WaterChillerController`| 18  | DS18B20 → ingoing water (to tank)   | DAT; own 1-Wire bus, pull-up |
+| `WaterChillerController`| 5   | DS18B20 → outgoing water (from tank)| DAT; own bus; strapping pin held HIGH by the pull-up |
 | `DehumidifierController`| 23  | SSR → dehumidifier                 | SSR input (see wiring note)  |
 | `DehumidifierController`| 25  | DHT22 data                         | 10kΩ pull-up to 3V3          |
-| (spare)                 | 19, 21, 22, 23, 32    | —                         | free on the gateway board   |
+| (spare)                 | 21, 22, 32, 33    | —                         | free on the gateway + chiller boards |
 
 ## Wiring notes
 
@@ -58,7 +60,7 @@ I/O with Wi-Fi and ESP-NOW running.
 - **SSR modules:** most SSR modules have an input that can be driven directly
   from a 3.3V GPIO (3-32V DC input). Confirm the module's input spec; if it
   needs more drive, buffer with a transistor/MOSFET.
-- **WiFi reset button:** a momentary push button wired from GPIO 33 to GND
+- **WiFi reset button:** a momentary push button wired from GPIO 25 to GND
   (the internal pull-up is enabled in code). Hold for ~3 s to erase the
   saved WiFi credentials (WiFiManager) and restart — a captive portal then
   opens for new SSID/password. Holding it at power-up also erases the

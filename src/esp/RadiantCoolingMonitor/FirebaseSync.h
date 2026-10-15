@@ -1,50 +1,63 @@
 #pragma once
 #include <Arduino.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
+#include <Firebase_ESP_Client.h>
+#include "firebase_credentials.h"
+#include "FirebaseConfig.h"
 
-#define ENABLE_USER_AUTH
-#define ENABLE_DATABASE
-#include <FirebaseClient.h>
+// Forward declaration
+class FirebaseSync;
+
+// Global instance pointer for callback access
+extern FirebaseSync* globalFirebaseSync;
+
+// User-provided stream handler signature
+typedef void (*StreamHandler)(MultiPathStream stream);
 
 class FirebaseSync {
 public:
-  struct Config {
-    const char* url      = nullptr;
-    const char* apiKey   = nullptr;
-    const char* email    = nullptr;
-    const char* password = nullptr;
+    FirebaseSync();
 
-  };
+    void begin();
+    void loop();
+    bool isReady();
 
-  typedef void (*StreamCb)(const char* path, const String& json);
+    // Data operations
+    bool setJson(const String& path, const String& json);
+    bool updateJson(const String& path, const String& json);
+    bool removeNode(const String& path);
 
-  FirebaseSync();
-  ~FirebaseSync();
+    // Register stream handlers (called from .ino)
+    void setConfigStreamHandler(StreamHandler handler);
+    void setControlStreamHandler(StreamHandler handler);
 
-  void begin(const Config& cfg);
-  void loop();
-  bool ready();
-  bool connected();
-
-  bool setJson(const String& path, const String& json);
-  bool updateJson(const String& path, const String& json);
-  bool removeNode(const String& path);
-
-  bool stream(const char* path, StreamCb cb);
+    // Public Firebase objects for callbacks
+    FirebaseData fbdo;
+    FirebaseData configStream;
+    FirebaseData controlStream;
 
 private:
-  static FirebaseSync* _instance;
-  static void _streamEventCb(AsyncResult& aResult);
+    FirebaseAuth auth;
+    FirebaseConfig config;
 
-  WiFiClientSecure _sslClient;
-  WiFiClientSecure _streamSslClient;
-  AsyncClientClass _aClient;
-  AsyncClientClass _streamClient;
-  firebase_ns::FirebaseApp _app;
-  RealtimeDatabase _rtdb;
+    // Stream active states
+    bool configStreamActive;
+    bool controlStreamActive;
 
-  const char* _streamPath = nullptr;
-  StreamCb _streamCb = nullptr;
-  bool _streamStarted = false;
+    // User-provided handlers
+    StreamHandler configHandler;
+    StreamHandler controlHandler;
+
+    // Internal methods
+    void initializeStreams();
+    void initializeConfigStream();
+    void initializeControlStream();
+    void handleStreams();
+    void printNetworkDiagnostics();
+
+    // Static callbacks for Firebase library
+    static void configStreamCallback(MultiPathStream stream);
+    static void configStreamTimeoutCallback(bool timeout);
+    static void controlStreamCallback(MultiPathStream stream);
+    static void controlStreamTimeoutCallback(bool timeout);
 };

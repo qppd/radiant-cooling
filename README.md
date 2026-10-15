@@ -41,13 +41,15 @@
 A complete control and monitoring system for a **radiant cooling**
 installation. Three ESP32 boards form a wireless mesh:
 
-- **RadiantCoolingMonitor** (gateway) reads **6× DS18B20** water/pipe
-  temperatures, collects data from the other boards, fetches outdoor
+- **RadiantCoolingMonitor** (gateway) reads **4× DS18B20** ceiling
+  pipe temperatures (one 1-Wire bus each), collects data from the other
+  boards, fetches outdoor
   weather (API key managed by the app), and pushes everything to Firebase —
   while also computing the chiller pump control (weather-driven +
   condensation protection).
-- **WaterChillerController** switches **2 water pumps (SSR)** on command from
-  the gateway.
+- **WaterChillerController** switches the **compressor + water pump (SSR)**
+  on command from the gateway, and reports the tank water temperature
+  (outgoing + ingoing DS18B20).
 - **DehumidifierController** holds indoor humidity at **55% RH** with its
   DHT22.
 
@@ -56,9 +58,9 @@ and the gateway is the only device with Wi-Fi.
 
 ## Features
 
-- **ESP-NOW mesh** — peer-to-peer, no router or broker required between boards
-- **Two-way Firebase** — realtime *streaming* of config changes from the app,
-  plus telemetry/state writes (Mobizt `FirebaseClient`, async, non-blocking)
+|- **ESP-NOW mesh** — peer-to-peer, no router or broker required between boards
+|- **Two-way Firebase** — realtime *streaming* of config + control changes from the app,
+  plus telemetry/state writes (Mobizt `Firebase_ESP_Client`, multi-path stream callbacks)
 - **Weather-aware pump control** — combines WeatherAPI.com dew point,
   indoor humidity, water/pipe temperatures and indoor air (DHT22);
   anti-condensation protection on the coldest pipe
@@ -98,9 +100,9 @@ Full diagrams: [`docs/diagrams/`](docs/diagrams/) · [`docs/schematic/pin-map.md
 
 | Board                       | Sensors                           | Actuators (SSR)           | Role     |
 | --------------------------- | --------------------------------- | ------------------------- | -------- |
-| `RadiantCoolingMonitor`     | 6× DS18B20 (1-Wire, GPIO 18)      | —                         | Gateway  |
-| `WaterChillerController`    | 1× DS18B20 (GPIO 22)              | 2× SSR → pumps (19, 21)   | Peer     |
-| `DehumidifierController`    | 1× DHT22 (GPIO 32)                | 1× SSR → dehumidifier (23)| Peer     |
+| `RadiantCoolingMonitor`     | 4× DS18B20 ceiling (GPIO 23/21/18/19, one bus each) | —                         | Gateway  |
+| `WaterChillerController`    | 2× DS18B20 tank (GPIO 5 out / 18 in) | 2× SSR → compressor + pump (23, 19) | Peer     |
+| `DehumidifierController`    | 1× DHT22 (GPIO 25)                | 1× SSR → dehumidifier (23)| Peer     |
 
 All pins are boot/Wi-Fi-safe for the 38-pin ESP32 variant — see the
 [pin map](docs/schematic/pin-map.md).
@@ -238,7 +240,7 @@ The app provides:
 | --------------- | ------------------------------------------------- |
 | Firmware        | ESP32 (WROOM-32), C/C++, Arduino IDE              |
 | Mesh            | ESP-NOW (built into the ESP32 core)               |
-| Cloud           | Firebase Realtime Database + FirebaseClient       |
+| Cloud           | Firebase Realtime Database + Firebase_ESP_Client        |
 | Weather         | WeatherAPI.com (key in the Flutter app)           |
 | WiFi provisioning | WiFiManager (captive portal)                    |
 | App             | Flutter (Android)                                 |

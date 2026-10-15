@@ -88,6 +88,8 @@ references/firebase-creds.txt
 # Keep real API keys local; commit only the .example template.
 # Real Firebase credentials (class-based config; keep the .example)
 src/esp/**/FirebaseConfig.cpp
+# Real Firebase credentials (header-based config; keep a .example if any)
+src/esp/**/firebase_credentials.h
 !.example.h
 
 # ===== Logs & temporary files =====

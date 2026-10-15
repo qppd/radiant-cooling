@@ -1,19 +1,10 @@
 #pragma once
 #include <Arduino.h>
 
+// Database path helpers for Radiant Cooling
 class RadiantFirebaseConfig {
 public:
-  static const char* getFirebaseHost();
-
-  static const char* getDatabaseURL();
-
-  static const char* getApiKey();
-
-  static const char* getProjectId();
-
-  static const char* getAuthEmail();
-  static const char* getAuthPassword();
-
+  // RTDB paths
   static const char* getConfigPath();
   static const char* getConfigControlParamsPath();
   static const char* getConfigDhPath();
@@ -22,4 +13,7 @@ public:
   static const char* getStateBasePath();
   static const char* getHeartbeatPath();
   static const char* getDevicesBasePath();
+
+  // Control stream path (realtime commands from app/dashboard)
+  static const char* getControlPath();
 };

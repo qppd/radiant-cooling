@@ -38,7 +38,7 @@
 | Board-to-cloud  | HTTPS REST to Firebase RTDB         | Gateway board only                    |
 | Cloud database  | Firebase Realtime Database          | JSON tree; path scheme in `api.md`    |
 | Weather data    | WeatherAPI.com (free tier)          | Gateway fetches it; the app delivers the API key via `config/weather_key` |
-| Provisioning    | WiFiManager captive portal (gateway)| Branded portal (AP `RadiantCooling-AP`, 192.168.4.1); enter SSID/password once; reset button (GPIO 33) to re-provision |
+| Provisioning    | WiFiManager captive portal (gateway)| Branded portal (AP `RadiantCooling-AP`, 192.168.4.1); enter SSID/password once; reset button (GPIO 25) to re-provision |
 
 ## Documentation
 

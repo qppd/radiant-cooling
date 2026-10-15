@@ -62,13 +62,13 @@ Database URL shape: `https://<project>.firebaseio.com/`
 radiant/
 ├── telemetry/
 │   ├── monitor/                 # gateway's own sensors
-│   │   └── latest               # { temps_c: [6 values] }
+│   │   └── latest               # { temps_c: [4 values] }
 │   ├── chiller/
 │   │   └── latest
 │   └── dh/
 │       └── latest
 ├── state/                       # current actuator states
-│   ├── chiller/                 # { pump1, pump2 }
+│   ├── chiller/                 # { compressor, pump1 }
 │   └── dh/                      # { dehumidifier }
 ├── config/                      # writable by app, consumed by firmware
 │   ├── control/                 # gateway control params (chiller computation)
@@ -83,22 +83,24 @@ radiant/
 
 ### 3.1 `telemetry/<device>/latest`
 
-`monitor` (6x DS18B20 on the chilled-water pipes + computed control values;
-`temps_c` = [supply, return, pipe1..pipe4]):
+`monitor` (4x ceiling DS18B20, one 1-Wire bus each + computed control
+values; `temps_c` = [ceiling1..ceiling4], where sensors 1-2 feed
+supply/return):
 
 ```json
-{ "temps_c": [16.2, 16.8, 17.1, 22.4, 23.1, 22.8],
+{ "temps_c": [16.2, 16.8, 17.1, 22.4],
   "supply_c": 16.2, "return_c": 16.8, "coldest_pipe_c": 16.2,
   "delta_t_c": 0.6, "outdoor_temp_c": 31.2, "outdoor_dewpoint_c": 24.5,
   "outdoor_humidity_pct": 66.0, "dew_point_c": 18.0,
   "water_floor_c": 20.0, "pumps": "on", "ts": 1786119829 }
 ```
 
-`chiller` (three DS18B20 adapters + compressor and pump states):
+`chiller` (two DS18B20 tank sensors + compressor and pump states;
+`water_temp_c` = coldest valid of outgoing/ingoing):
 
 ```json
-{ "outgoing_temp_c": 16.2, "ingoing_temp_c": 16.8, "tank_temp_c": 17.1,
-  "water_temp_c": 17.1, "compressor": "on", "pump1": "on", "pump2": "off",
+{ "outgoing_temp_c": 16.2, "ingoing_temp_c": 16.8,
+  "water_temp_c": 16.2, "compressor": "on", "pump1": "on",
   "ts": 1786119829 }
 ```
 
@@ -115,7 +117,7 @@ radiant/
 ### 3.2 `state/<device>`
 
 ```json
-{ "pump1": "on", "pump2": "off" }       // chiller
+{ "compressor": "on", "pump1": "on" }       // chiller
 { "dehumidifier": "on" }                 // dh
 ```
 
@@ -167,13 +169,13 @@ firmware.
 
 ```json
 { "v": 1, "t": "telemetry", "src": "chiller", "seq": 42,
-  "d": { "water_temp_c": 16.2, "pump1": "on", "pump2": "off" } }
+  "d": { "water_temp_c": 16.2, "pump1": "on" } }
 ```
 
 | Field | Values                        | Meaning                     |
 | ----- | ----------------------------- | --------------------------- |
 | `v`   | int                           | Protocol version (starts at 1) |
-| `t`   | `telemetry`, `state`, `cmd`, `config`, `status` | Message type |
+| `t`   | int (`1`=telemetry, `2`=state, `3`=cmd, `4`=config, `5`=status) | Message type |
 | `src` | `monitor`, `chiller`, `dh`    | Sender device ID            |
 | `seq` | unsigned int                  | Sequence number (dedupe)    |
 | `d`   | object                        | Type-specific payload       |
@@ -187,7 +189,7 @@ firmware.
 | Type        | Direction                | Payload example                                      |
 | ----------- | ------------------------ | ---------------------------------------------------- |
 | `telemetry` | peer → gateway           | `{ "water_temp_c": 16.2, "pump1": "on", ... }`      |
-| `state`     | peer → gateway           | `{ "pump1": "on", "pump2": "off" }`                |
+| `state`     | peer → gateway           | `{ "compressor": "on", "pump1": "on" }`            |
 | `cmd`       | gateway → peer           | `{ "cmd": "set_pumps", "value": "on" }`            |
 | `config`    | gateway → peer           | `{ "comfort_setpoint_c": 24.0, "dewpoint_margin_c": 2.0 }` |
 | `status`    | both                     | `{ "online": true, "firmware": "0.1.0" }`            |
@@ -213,8 +215,9 @@ firmware.
 ### Chiller control (computed on the gateway)
 1. The gateway polls WeatherAPI.com (key delivered by the app via
    `radiant/config/weather_key`) and combines the outdoor dew point, the
-   indoor DHT22 temperature + humidity, the chilled-water supply/return +
-   pipe temperatures (6x DS18B20) and the chiller tank temperature.
+   indoor DHT22 temperature + humidity, the 4x ceiling pipe temperatures
+   (DS18B20) and the chiller tank water temperature (coldest of the
+   outgoing/ingoing sensors).
 2. Reference dew point = **higher of outdoor/indoor**; water floor = dew
    point + `dewpoint_margin_c` (anti-condensation).
 3. Pumps run when **weather demand** AND **sensor demand** (indoor DHT22
