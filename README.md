@@ -253,12 +253,11 @@ The app provides:
 - [x] First-login device linking page
 - [x] Firebase security rules file in `docs/` (`firebase-security-rules.json`)
 - [x] Unit tests for `ClimateControl` (dew point + pump decision, `src/esp/tests/`)
-- [ ] `LICENSE` file
+- [x] `LICENSE` file
 
 ## License
 
-This project is provided under the **MIT License** — a `LICENSE` file will be
-added soon.
+This project is provided under the **MIT License** — see the [`LICENSE`](LICENSE) file for details.
 
 ## Author
 
