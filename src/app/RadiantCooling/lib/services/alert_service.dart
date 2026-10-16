@@ -108,7 +108,9 @@ class AlertService {
   }
 
   Future<void> addAlert(Alert alert) async {
-    final alerts = await load();
+    // load() returns a const list when there is no alert file yet (a fresh
+    // install - exactly when the first alert arrives), so copy before mutating.
+    final alerts = List<Alert>.from(await load());
     alerts.insert(0, alert);
 
     final cutoff = DateTime.now().subtract(_maxAge);

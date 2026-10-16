@@ -28,7 +28,7 @@ wm.setConnectTimeout(15);                     // connection timeout (s)
 
 - `WifiProvisioner` (gateway only) wraps WiFiManager.
 - On first boot the portal AP **`RadiantCooling-AP`** opens.
-- **Reset button (GPIO 33):** hold ~3 s → `resetSettings()` + `ESP.restart()`;
+- **Reset button (GPIO 25):** hold ~3 s → `resetSettings()` + `ESP.restart()`;
   holding it at power-up also erases credentials so the portal re-opens.
 - **Warning:** The gateway's Wi-Fi channel becomes the router's channel — ESP-NOW peers
   must match it (fix the router to 1/6/11, see `docs/schematic/pin-map.md`).

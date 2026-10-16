@@ -64,6 +64,12 @@ const char* RadiantFirebaseConfig::getConfigWeatherKeyPath() {
   return "/radiant/config/weather_key";
 }
 
+// Written by the app (radiant/devices/<SYSTEM_ID>/control), streamed by the
+// gateway. Keep the SYSTEM_ID here in sync with Config.h.
+const char* RadiantFirebaseConfig::getControlPath() {
+  return "/radiant/devices/RADIANT-001/control";
+}
+
 const char* RadiantFirebaseConfig::getTelemetryBasePath() {
   return "/radiant/telemetry";
 }

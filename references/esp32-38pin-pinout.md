@@ -15,23 +15,29 @@
 
 ## Digital-safe pool (used by this project)
 
-`18, 19, 21, 22, 23, 32, 33`
+`5, 18, 19, 21, 22, 23, 25, 32, 33`
 
 | Board                   | Pin | Use                    |
 | ----------------------- | --- | ---------------------- |
-| `RadiantCoolingMonitor` | 18  | 1-Wire (6× DS18B20)    |
-| `RadiantCoolingMonitor` | 33  | WiFi reset button      |
-| `WaterChillerController`| 19, 21 | SSR pump 1, pump 2  |
-| `WaterChillerController`| 22  | 1-Wire (1× DS18B20)    |
+| `RadiantCoolingMonitor` | 23, 21, 18, 19 | 1-Wire (4× ceiling DS18B20, one bus each) |
+| `RadiantCoolingMonitor` | 25  | WiFi reset button      |
+| `WaterChillerController`| 23, 19 | SSR compressor, SSR pump |
+| `WaterChillerController`| 18, 5  | 1-Wire (ingoing, outgoing DS18B20) |
 | `DehumidifierController`| 23  | SSR dehumidifier       |
-| `DehumidifierController`| 32  | DHT22                  |
+| `DehumidifierController`| 25  | DHT22                  |
 
 ## Key boot notes
 
 - **GPIO 12** must be LOW at boot (pull-up there can brick flashing).
 - **GPIO 0** LOW at boot = download/flash mode (handled by the USB-UART).
-- ADC2 pins are safe for **digital** I/O, but were avoided entirely here to
-  keep the option of analog reads and zero Wi-Fi surprises.
+- **GPIO 5** is a strapping pin, but only selects SDIO timing (unused — we
+  boot from flash). The chiller's outgoing DS18B20 sits on it; the sensor's
+  4.7 kΩ pull-up holds it HIGH at boot, i.e. its default state.
+- **GPIO 25** is an ADC2 pin — `analogRead()` won't work there with Wi-Fi
+  on, but digital input with the internal pull-up (the gateway's reset
+  button) is fine.
+- ADC2 pins are safe for **digital** I/O, but were avoided for analog reads
+  to keep the option of analog sensing and zero Wi-Fi surprises.
 
 ## Links
 

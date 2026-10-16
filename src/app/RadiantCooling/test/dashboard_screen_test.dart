@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:radiant_cooling/models/telemetry.dart';
 import 'package:radiant_cooling/screens/dashboard_screen.dart';
+import 'package:radiant_cooling/services/radiant_firebase.dart';
 
 import 'fakes.dart';
 
@@ -75,8 +76,9 @@ void main() {
     expect(find.text('17.1 °C'), findsOneWidget);
     expect(find.text('22.4 °C'), findsOneWidget);
 
-    expect(find.text('Chiller pump 1'), findsOneWidget);
-    expect(find.text('Chiller pump 2'), findsOneWidget);
+    expect(find.text('Room climate'), findsOneWidget);
+    expect(find.text('Compressor'), findsOneWidget);
+    expect(find.text('Water pump'), findsOneWidget);
     expect(find.text('Dehumidifier'), findsWidgets);
     expect(find.text('ON'), findsNWidgets(2));
     expect(find.text('OFF'), findsOneWidget);
@@ -105,5 +107,112 @@ void main() {
     expect(find.text('Gateway offline'), findsOneWidget);
     expect(find.text('No pipe readings yet'), findsOneWidget);
     expect(find.text('—'), findsWidgets);
+  });
+
+  testWidgets('control card follows the control node, not the slow telemetry',
+      (tester) async {
+    final firebase = FakeRadiantFirebase(
+      // What the app just toggled...
+      controlState: const ControlState(pumpsOn: true, mode: 'manual'),
+      // ...versus the gateway's last 30 s telemetry snapshot.
+      monitor: const MonitorTelemetry(pumpsOn: false, mode: 'auto'),
+      heartbeat: const Heartbeat(online: true, deviceId: 'RADIANT-001'),
+      chillerState: const ChillerState(),
+    );
+    await pumpDashboard(tester, firebase);
+
+    // Manual mode: the card believes the command, so OFF is the action offered.
+    expect(
+      tester
+          .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Pumps OFF'))
+          .onPressed,
+      isNotNull,
+    );
+    expect(
+      tester
+          .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Pumps ON'))
+          .onPressed,
+      isNull,
+    );
+    expect(
+      tester
+          .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'manual'))
+          .selected,
+      isTrue,
+    );
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Pumps OFF'));
+    await tester.pump();
+    expect(firebase.lastPumpsWrite, isFalse);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'auto'));
+    await tester.pump();
+    expect(firebase.lastModeWrite, 'auto');
+  });
+
+  testWidgets('in auto mode the card shows what the gateway decided',
+      (tester) async {
+    final firebase = FakeRadiantFirebase(
+      controlState: const ControlState(pumpsOn: false, mode: 'auto'),
+      monitor: const MonitorTelemetry(pumpsOn: true, mode: 'auto'),
+      heartbeat: const Heartbeat(online: true, deviceId: 'RADIANT-001'),
+      chillerState: const ChillerState(),
+    );
+    await pumpDashboard(tester, firebase);
+
+    expect(
+      tester
+          .widget<OutlinedButton>(
+              find.widgetWithText(OutlinedButton, 'Pumps OFF'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('outdoor weather prefers the gateway weather node',
+      (tester) async {
+    final firebase = FakeRadiantFirebase(
+      weatherNow: const WeatherNow(
+        tempC: 33.5,
+        dewPointC: 25.1,
+        humidityPct: 61,
+        feelsLikeC: 40.2,
+        condition: 'Light rain',
+      ),
+      // Stale monitor telemetry that must not win over the weather node.
+      monitor: const MonitorTelemetry(
+        outdoorTempC: 31.2,
+        outdoorDewPointC: 24.5,
+        outdoorHumidityPct: 66,
+      ),
+      heartbeat: const Heartbeat(online: true, deviceId: 'RADIANT-001'),
+      chillerState: const ChillerState(),
+    );
+    await pumpDashboard(tester, firebase);
+
+    expect(find.text('33.5 °C'), findsOneWidget);
+    expect(find.text('25.1 °C'), findsOneWidget);
+    expect(find.text('61 %'), findsOneWidget);
+    expect(find.textContaining('Light rain'), findsOneWidget);
+  });
+
+  testWidgets('outdoor weather falls back to monitor telemetry',
+      (tester) async {
+    final firebase = FakeRadiantFirebase(
+      monitor: const MonitorTelemetry(
+        outdoorTempC: 31.2,
+        outdoorDewPointC: 24.5,
+        outdoorHumidityPct: 66,
+      ),
+      heartbeat: const Heartbeat(online: true, deviceId: 'RADIANT-001'),
+      chillerState: const ChillerState(),
+    );
+    await pumpDashboard(tester, firebase);
+
+    expect(find.text('31.2 °C'), findsOneWidget);
+    expect(find.text('24.5 °C'), findsOneWidget);
+    expect(find.text('66 %'), findsOneWidget);
   });
 }

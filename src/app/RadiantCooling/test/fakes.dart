@@ -49,6 +49,27 @@ class FakeAuthService extends AuthService {
   Future<void> signOut() async {}
 }
 
+/// One `setDeviceOnline` call, recorded so tests can assert the watchdog's
+/// offline/online verdicts.
+class DeviceOnlineWrite {
+  const DeviceOnlineWrite(
+    this.device,
+    this.online, {
+    this.role,
+    this.parent,
+    this.lastSeenTs,
+  });
+
+  final String device;
+  final bool online;
+  final String? role;
+  final String? parent;
+  final int? lastSeenTs;
+
+  @override
+  String toString() => 'DeviceOnlineWrite($device, online: $online)';
+}
+
 class FakeRadiantFirebase extends RadiantFirebase {
   FakeRadiantFirebase({
     MonitorTelemetry? monitor,
@@ -59,6 +80,9 @@ class FakeRadiantFirebase extends RadiantFirebase {
     Heartbeat? heartbeat,
     ControlParams? controlParams,
     DhConfig? dhConfig,
+    ControlState? controlState,
+    WeatherNow? weatherNow,
+    String? weatherKey,
   }) : _monitor = monitor,
        _chiller = chiller,
        _dh = dh,
@@ -67,6 +91,9 @@ class FakeRadiantFirebase extends RadiantFirebase {
        _heartbeat = heartbeat,
        _controlParams = controlParams,
        _dhConfig = dhConfig,
+       _controlState = controlState,
+       _weatherNow = weatherNow,
+       _weatherKey = weatherKey,
        super();
 
   static Stream<T> _value<T>(T? value) =>
@@ -80,9 +107,17 @@ class FakeRadiantFirebase extends RadiantFirebase {
   final Heartbeat? _heartbeat;
   final ControlParams? _controlParams;
   final DhConfig? _dhConfig;
+  final ControlState? _controlState;
+  final WeatherNow? _weatherNow;
+  final String? _weatherKey;
 
   ControlParams? lastControlParamsWrite;
   DhConfig? lastDhConfigWrite;
+  bool? lastPumpsWrite;
+  String? lastModeWrite;
+
+  /// Every liveness verdict the watchdog published.
+  final List<DeviceOnlineWrite> deviceOnlineWrites = [];
 
   List<String> knownSystems = const [];
 
@@ -109,6 +144,48 @@ class FakeRadiantFirebase extends RadiantFirebase {
 
   @override
   Stream<DhConfig> dhConfigStream() => _value(_dhConfig);
+
+  @override
+  Stream<String?> weatherKeyStream() => _value(_weatherKey);
+
+  @override
+  Stream<ControlState> controlStream(String systemId) => _value(_controlState);
+
+  @override
+  Stream<WeatherNow> weatherStream() => _value(_weatherNow);
+
+  @override
+  Future<void> setPumps(bool on) async => lastPumpsWrite = on;
+
+  @override
+  Future<void> setMode(String mode) async => lastModeWrite = mode;
+
+  @override
+  Future<void> setDeviceOnline(
+    String device, {
+    required bool online,
+    String? role,
+    String? parent,
+    int? lastSeenTs,
+  }) async {
+    deviceOnlineWrites.add(DeviceOnlineWrite(
+      device,
+      online,
+      role: role,
+      parent: parent,
+      lastSeenTs: lastSeenTs,
+    ));
+  }
+
+  @override
+  Future<String?> fetchWeatherKey() async => _weatherKey;
+
+  @override
+  Future<ControlParams> fetchControlParams() async =>
+      _controlParams ?? const ControlParams();
+
+  @override
+  Future<DhConfig> fetchDhConfig() async => _dhConfig ?? const DhConfig();
 
   @override
   Future<List<String>> discoverSystems() async => knownSystems;

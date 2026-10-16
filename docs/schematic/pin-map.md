@@ -36,7 +36,7 @@ pull-up; GPIO25 is ADC2 but only used as a digital input).
 | `RadiantCoolingMonitor` | 23  | DS18B20 ceiling sensor 1           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
 | `RadiantCoolingMonitor` | 21  | DS18B20 ceiling sensor 2           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
 | `RadiantCoolingMonitor` | 18  | DS18B20 ceiling sensor 3           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
-| `RadiantCoolingMonitor` | 19  | DS18B20 ceiling sensor 4           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
+| `RadiantCoolingMonitor` | 5   | DS18B20 ceiling sensor 4           | own 1-Wire bus; 4.7kΩ pull-up to 3V3; strapping pin held at its default HIGH by the pull-up, so boot is unaffected |
 | `RadiantCoolingMonitor` | 25  | WiFi reset button                   | momentary switch to GND, INPUT_PULLUP; hold 3 s to erase WiFi credentials |
 | `WaterChillerController`| 23  | SSR → compressor                    | SSR input (see wiring note)  |
 | `WaterChillerController`| 19  | Relay IN → water pump               | Relay input (see wiring note)|

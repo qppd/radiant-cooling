@@ -8,7 +8,7 @@ only (wiring + control logic).
 
 | Folder                     | Hardware                                                     | Role     |
 | -------------------------- | ------------------------------------------------------------ | -------- |
-| `RadiantCoolingMonitor/`   | 4x DS18B20 ceiling sensors (one 1-Wire bus each: 23/21/18/19) + WiFi reset button (25) | Gateway  |
+| `RadiantCoolingMonitor/`   | 4x DS18B20 ceiling sensors (one 1-Wire bus each: 23/21/18/5) + WiFi reset button (25) | Gateway  |
 | `WaterChillerController/`  | 2x DS18B20 tank sensors (out=5, in=18), compressor SSR (23), pump relay (19) | Peer     |
 | `DehumidifierController/`  | DHT22 (GPIO25), 1x SSR (GPIO23) -> dehumidifier          | Peer     |
 
@@ -105,6 +105,27 @@ email/password (not anonymous) when those rules are used.
 - **ESP-NOW receive** on every board is decoupled through a FreeRTOS queue:
   the callback only enqueues raw bytes; `loop()` drains, decodes
   (`JsonProtocol`), and applies/handles the message.
+- **ESP-NOW channel and power save:** every board calls `WiFi.setSleep(false)`
+  - a sleeping receiver misses the MAC-layer ACK window, so the data still
+  arrives while every send logs `tx FAIL`. Peers never join an AP, so they pin
+  their radio with `ESP_NOW_CHANNEL` in `Config.h`; the gateway always follows
+  the router. All boards must share one channel: the gateway prints
+  `CHANNEL MISMATCH` at boot when they do not, and both ends print their
+  channel (`wifi` on the gateway, `status` on the peers).
+- **Gateway tasking**: Firebase and the WeatherAPI HTTPS fetch run on a
+  dedicated 20 KB `cloudTask`, never on `loop()`. The Arduino `loopTask`
+  stack is only 8 KB and a TLS handshake overflowed it (`Stack canary
+  watchpoint triggered (loopTask)`), so `loop()` now only enqueues
+  `path + json` pairs on a FreeRTOS queue: the cloud task drains them
+  (latest write per path wins, so a burst of ESP-NOW telemetry costs one
+  connection open per path) and reloads its own weather inputs. Keep new
+  `Firebase.*` / `HTTPClient` calls on the cloud task - in `loop()` they
+  will panic again.
+- **Weather**: the gateway picks the WeatherAPI key up from Firebase (config
+  stream, plus a REST re-read while it has none, hourly afterwards, and
+  straight after a failed fetch), fetches `current.json` every
+  `WEATHER_POLL_S`, and publishes the reading to
+  `radiant/telemetry/weather/latest` as well as into its own telemetry.
 - **Gateway** reads the 4 ceiling pipe temperatures (4x DS18B20, one 1-Wire
   bus each: sensors 1-2 feed the supply/return telemetry), caches
   the latest peer readings for the chiller computation, forwards peer
@@ -131,7 +152,7 @@ command chain, polled at the top of `loop()`. Open the Serial Monitor at
 
 | Command | Board | What it exercises |
 | ------- | ----- | ----------------- |
-| `temps`, `temp <0-3>` | monitor | the 4 ceiling DS18B20 sensors, one bus each (GPIO 23 / 21 / 18 / 19; DISCONNECTED / 85 °C / out-of-range diagnostics) |
+| `temps`, `temp <0-3>` | monitor | the 4 ceiling DS18B20 sensors, one bus each (GPIO 23 / 21 / 18 / 5; DISCONNECTED / 85 °C / out-of-range diagnostics) |
 | `button`, `button test` | monitor | WiFi reset button (GPIO 25): one-shot read, or a 10 s press/release edge watch |
 | `wifi` | monitor | WiFi link (SSID / IP / RSSI / MAC) |
 | `wx` | monitor | WeatherAPI fetch on demand (updates the cached outdoor inputs) |
@@ -171,6 +192,23 @@ hysteresis, reference dew point selection).
 cd src/esp/tests
 ./run_tests.sh     # requires g++ (Git Bash / WSL on Windows works)
 ```
+
+## Building (headless, arduino-cli)
+
+A local toolchain is set up under `.arduino/` (git-ignored) — its
+`arduino-cli.yaml` keeps the core, libraries and downloads inside the repo, so
+no global install is needed:
+
+```bash
+./.arduino/bin/arduino-cli.exe compile --fqbn \
+  esp32:esp32:esp32:PartitionScheme=huge_app --build-path .arduino/build/monitor \
+  src/esp/RadiantCoolingMonitor
+```
+
+The **`PartitionScheme=huge_app`** option is required: the gateway sketch
+(Firebase + TLS + WiFiManager + ArduinoJson) links to ~1.41 MB, which is over
+the 1.31 MB app partition of the default scheme. Select the same option in the
+Arduino IDE (Tools → Partition Scheme → "Huge APP (3MB No OTA/1MB SPIFFS)").
 
 ## Working with the sketches
 

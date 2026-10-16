@@ -65,8 +65,10 @@ radiant/
 │   │   └── latest               # { temps_c: [4 values] }
 │   ├── chiller/
 │   │   └── latest
-│   └── dh/
-│       └── latest
+│   ├── dh/
+│   │   └── latest
+│   └── weather/
+│       └── latest               # gateway's WeatherAPI reading (see §4)
 ├── state/                       # current actuator states
 │   ├── chiller/                 # { compressor, pump1 }
 │   └── dh/                      # { dehumidifier }
@@ -78,8 +80,15 @@ radiant/
 ├── heartbeat/                   # gateway writes, app can watch
 │   └── monitor/                 # { online, device_id, firmware, ts }
 └── devices/                     # device registry (system linking)
-    └── <SYSTEM_ID>/             # { online, device_id, firmware, ts }
+    ├── <SYSTEM_ID>/             # { online, device_id, firmware, ts }
+    ├── chiller/                 # { online, role: 'peer', parent, ts }
+    └── dh/                      # { online, role: 'peer', parent, ts }
 ```
+
+The `chiller` and `dh` entries are liveness records only: peers never touch
+Firebase, so the **app watchdog** creates them and flips `online` to `false`
+when that device stops reporting (and back to `true` when it resumes). They
+carry `role: 'peer'`, so they are not offered as linkable systems.
 
 ### 3.1 `telemetry/<device>/latest`
 
@@ -108,6 +117,16 @@ supply/return):
 
 ```json
 { "temp_c": 24.3, "humidity_pct": 52.0, "ts": 1786119829 }
+```
+
+`weather` (written by the gateway right after each WeatherAPI fetch, so the
+app does not have to wait for the 30 s monitor cycle):
+
+```json
+{ "location": "Manila", "temp_c": 31.2, "feels_like_c": 36.0,
+  "humidity_pct": 66.0, "dew_point_c": 24.5, "wind_kph": 12.5,
+  "condition": "Partly cloudy", "is_day": 1,
+  "obs_epoch": 1786119000, "ts": 1786119829 }
 ```
 
 > `ts` is stamped by the **gateway** (NTP time once synced, uptime-seconds
@@ -145,9 +164,18 @@ firmware.
 
 - **Endpoint (gateway):** `GET https://api.weatherapi.com/v1/current.json?key=<KEY>&q=<LOCATION>&aqi=no`
 - **Fields used:** `current.temp_c`, `current.humidity`, `current.dewpoint_c`
+  for control, plus `feelslike_c`, `wind_kph`, `condition.text`, `is_day` and
+  `last_updated_epoch` for the app's weather card.
+- **Published:** the reading is written to `radiant/telemetry/weather/latest`
+  (and the `outdoor_*` fields of `telemetry/monitor/latest` used by control).
 - **Key delivery:** the app writes the key to `radiant/config/weather_key`
   (a string); the gateway streams it and keeps it in RAM. A gateway reboot
-  loses it, so the app re-sends it on launch / (re)link.
+  loses it, so the app re-sends it on launch / (re)link. The gateway does not
+  rely on the stream alone: it also reads the key back over REST every
+  `WEATHER_KEY_RETRY_S` (60 s) while it has none, refreshes it every
+  `WEATHER_KEY_REFRESH_S` (1 h) to catch a rotation, and re-reads immediately
+  after a failed fetch — so a dropped stream or a key set while the gateway
+  was offline still reaches it.
 - **Throttle:** the gateway polls every `WEATHER_POLL_S` (default 900 s =
   15 min) to stay inside the free-tier daily call budget.
 - **Failure handling:** on a failed fetch (bad/absent key, API unreachable)

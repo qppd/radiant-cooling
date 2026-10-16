@@ -38,9 +38,10 @@ float t = sensors.getTempCByIndex(0);   // read sensor 0 after ~750 ms
 
 ## How it is used here
 
-- `TemperatureSensor` module wraps each bus. The gateway uses one bus for six
-  sensors; the chiller uses three separate buses: outgoing water on GPIO 32,
-  ingoing water on GPIO 23, and the water-chiller tank on GPIO 19.
+- `TemperatureSensor` module wraps each bus. Every sensor in this project has
+  its **own** bus (one DS18B20 per GPIO, 4.7 kΩ pull-up each): the gateway
+  reads 4 ceiling sensors on GPIO 23, 21, 18 and 19; the chiller reads the
+  tank's outgoing water on GPIO 5 and ingoing water on GPIO 18.
 - Room temperatures feed the pump-control computation (`ClimateControl`).
 
 ## Links

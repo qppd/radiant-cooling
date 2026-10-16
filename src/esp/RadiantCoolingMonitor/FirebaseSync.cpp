@@ -5,11 +5,16 @@
 // Global instance pointer for callback access
 FirebaseSync* globalFirebaseSync = nullptr;
 
+// Minimum spacing between re-subscribe attempts for a dead stream.
+static const unsigned long kStreamRetryMs = 5000;
+
 FirebaseSync::FirebaseSync() {
     configStreamActive = false;
     controlStreamActive = false;
     configHandler = nullptr;
     controlHandler = nullptr;
+    lastConfigRetryMs = 0;
+    lastControlRetryMs = 0;
     globalFirebaseSync = this;
 }
 
@@ -152,6 +157,21 @@ void FirebaseSync::initializeControlStream() {
 }
 
 void FirebaseSync::handleStreams() {
+    // Re-subscribe dead streams. The timeout callback only clears the active
+    // flag, so without this a single network blip stopped config updates -
+    // including the WeatherAPI key delivery - until the next reboot.
+    const unsigned long now = millis();
+    if (!configStreamActive && now - lastConfigRetryMs >= kStreamRetryMs) {
+        lastConfigRetryMs = now;
+        Serial.println("Config stream down - resubscribing...");
+        initializeConfigStream();
+    }
+    if (!controlStreamActive && now - lastControlRetryMs >= kStreamRetryMs) {
+        lastControlRetryMs = now;
+        Serial.println("Control stream down - resubscribing...");
+        initializeControlStream();
+    }
+
     // Handle config stream
     if (configStreamActive && !Firebase.RTDB.readStream(&configStream)) {
         Serial.printf("Config stream error: %s\n", configStream.errorReason().c_str());
@@ -216,6 +236,19 @@ bool FirebaseSync::removeNode(const String& path) {
         Serial.printf("removeNode failed at %s: %s\n", path.c_str(), fbdo.errorReason().c_str());
         return false;
     }
+}
+
+bool FirebaseSync::readString(const String& path, String& out) {
+    if (!isReady()) return false;
+
+    if (!Firebase.RTDB.getString(&fbdo, path)) {
+        Serial.printf("readString failed at %s: %s\n", path.c_str(), fbdo.errorReason().c_str());
+        return false;
+    }
+
+    out = fbdo.stringData();
+    out.trim();
+    return out.length() > 0;
 }
 
 // ── Config Stream Callbacks ──

@@ -100,7 +100,7 @@ Full diagrams: [`docs/diagrams/`](docs/diagrams/) · [`docs/schematic/pin-map.md
 
 | Board                       | Sensors                           | Actuators (SSR)           | Role     |
 | --------------------------- | --------------------------------- | ------------------------- | -------- |
-| `RadiantCoolingMonitor`     | 4× DS18B20 ceiling (GPIO 23/21/18/19, one bus each) | —                         | Gateway  |
+| `RadiantCoolingMonitor`     | 4× DS18B20 ceiling (GPIO 23/21/18/5, one bus each) | —                         | Gateway  |
 | `WaterChillerController`    | 2× DS18B20 tank (GPIO 5 out / 18 in) | 2× SSR → compressor + pump (23, 19) | Peer     |
 | `DehumidifierController`    | 1× DHT22 (GPIO 25)                | 1× SSR → dehumidifier (23)| Peer     |
 

@@ -105,3 +105,12 @@ docs/screenshots/
 
 # Local arduino-cli toolchain (see docs)
 .arduino/
+# ===== App credentials =====
+src/app/RadiantCooling/android/app/google-services.json
+# ===== ESP32 Firebase config =====
+src/esp/**/FirebaseConfig.cpp
+!src/esp/**/FirebaseConfig.cpp.example
+# ===== Optional local app config (if any) =====
+lib/config/app_config.dart
+# ===== Build artifacts (APK) =====
+installer/*.apk

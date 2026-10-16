@@ -56,6 +56,7 @@
 | Flutter SDK  | Android app build & test             |
 | Firebase CLI | Project config, emulator (optional)  |
 | CI (future)  | Optional GitHub Actions for firmware + app builds |
+| Installer    | `installer/RadiantCooling-release.apk`          | Release APK ready for Android installation |
 
 ## Alternatives considered
 

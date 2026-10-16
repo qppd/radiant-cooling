@@ -1,14 +1,33 @@
 #include "EspNowTransport.h"
+#include <esp_wifi.h>
 
 EspNowReceiveCb EspNowTransport::_recvHandler = nullptr;
 EspNowSendCb    EspNowTransport::_sendHandler = nullptr;
 
-bool EspNowTransport::begin() {
+bool EspNowTransport::begin(uint8_t channel) {
   WiFi.mode(WIFI_STA);
+  // Keep the radio fully awake: with WiFi power-save on (default when
+  // associated to an AP), the STA sleeps between DTIM beacons and misses the
+  // MAC-layer ACK window - ESP-NOW data is delivered but every send reports
+  // FAIL. This must run on the gateway; harmless on the peers.
+  WiFi.setSleep(false);
   if (esp_now_init() != ESP_OK) return false;
   esp_now_register_recv_cb(_recvCb);
   esp_now_register_send_cb(_sendCb);
+  // A peer that never joins an AP idles on channel 1 while the gateway
+  // follows the router - a silent, one-way failure (no ACK, every send FAIL).
+  // Pin the peer to the same channel the gateway's AP is on.
+  if (channel != 0 && esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
+    Serial.printf("[espnow] could not set channel %u\n", channel);
+  }
   return true;
+}
+
+uint8_t EspNowTransport::channel() {
+  uint8_t primary = 0;
+  wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+  if (esp_wifi_get_channel(&primary, &second) != ESP_OK) return 0;
+  return primary;
 }
 
 bool EspNowTransport::addPeer(const uint8_t* mac, uint8_t channel) {

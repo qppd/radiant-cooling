@@ -225,6 +225,11 @@ void handleSerialCommand() {
                   HUMIDITY_SETPOINT_PCT, HUMIDITY_DEADBAND_PCT,
                   systemEnabled ? "enabled" : "disabled",
                   dehumidifier.isOn() ? "ON" : "OFF");
+    // Compare with the gateway's `wifi` channel - both must match.
+    Serial.printf("espnow channel=%u (pinned %u)  gateway=%02X:%02X:%02X:%02X:%02X:%02X\n",
+                  EspNowTransport::channel(), ESP_NOW_CHANNEL,
+                  GATEWAY_MAC[0], GATEWAY_MAC[1], GATEWAY_MAC[2],
+                  GATEWAY_MAC[3], GATEWAY_MAC[4], GATEWAY_MAC[5]);
 
   } else if (cmd == "reboot" || cmd == "restart") {
     Serial.println("[test] rebooting...");
@@ -244,7 +249,7 @@ void setup() {
   roomClimate.begin();
   dehumidifier.begin();
 
-  if (!espNow.begin()) {
+  if (!espNow.begin(ESP_NOW_CHANNEL)) {
     Serial.println("ESP-NOW init failed");
     return;
   }

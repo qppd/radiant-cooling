@@ -27,6 +27,10 @@ public:
     bool updateJson(const String& path, const String& json);
     bool removeNode(const String& path);
 
+    // One-shot read of a scalar node (used to pull the WeatherAPI key without
+    // depending on the config stream being up).
+    bool readString(const String& path, String& out);
+
     // Register stream handlers (called from .ino)
     void setConfigStreamHandler(StreamHandler handler);
     void setControlStreamHandler(StreamHandler handler);
@@ -43,6 +47,11 @@ private:
     // Stream active states
     bool configStreamActive;
     bool controlStreamActive;
+
+    // Last re-subscribe attempt per stream (a dropped stream used to stay
+    // dead forever, which silently stopped config changes).
+    unsigned long lastConfigRetryMs;
+    unsigned long lastControlRetryMs;
 
     // User-provided handlers
     StreamHandler configHandler;

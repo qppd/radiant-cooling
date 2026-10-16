@@ -19,6 +19,7 @@ import 'services/alert_service.dart';
 import 'services/auth_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'services/device_link.dart';
+import 'services/device_watchdog.dart';
 import 'services/notification_service.dart';
 import 'services/radiant_firebase.dart';
 import 'services/telemetry_logger.dart';
@@ -163,6 +164,9 @@ class _HomeShellState extends State<HomeShell> {
   final _alertService = AlertService();
   final _notificationService = NotificationService();
 
+  // Marks a device registry node offline when that device stops reporting.
+  DeviceWatchdog? _watchdog;
+
   final List<StreamSubscription<dynamic>> _subs = [];
 
   String? _linkedId;
@@ -170,6 +174,19 @@ class _HomeShellState extends State<HomeShell> {
   bool _loading = true;
   int _tabIndex = 0;
   int _unreadAlertCount = 0;
+
+  // Latest readings from each stream (they arrive independently, on their
+  // own ~30 s cycles) merged into one logged point.
+  MonitorTelemetry? _lastMonitor;
+  ChillerTelemetry? _lastChiller;
+  DhTelemetry? _lastDh;
+  DateTime? _lastLogAt;
+  Timer? _logDebounce;
+
+  /// Minimum spacing between logged points; coalesces the near-simultaneous
+  /// monitor/chiller/DH updates into a single write so the 7-day log keeps
+  /// ~2 points/min instead of one per stream event.
+  static const _minLogGap = Duration(seconds: 30);
 
   @override
   void initState() {
@@ -181,14 +198,8 @@ class _HomeShellState extends State<HomeShell> {
 
   void _startStreamListeners() {
     _subs.add(_firebase.monitorStream().listen((m) {
-      _telemetryLogger.log(TelemetryPoint(
-        timestamp: DateTime.now(),
-        supplyC: m.supplyC,
-        returnC: m.returnC,
-        coldestPipeC: m.coldestPipeC,
-        outdoorTempC: m.outdoorTempC,
-        outdoorDewPointC: m.outdoorDewPointC,
-      ));
+      _lastMonitor = m;
+      _logSnapshot();
       final wasCount = _unreadAlertCount;
       _alertService.processMonitorTelemetry(
         coldestPipeC: m.coldestPipeC,
@@ -198,10 +209,13 @@ class _HomeShellState extends State<HomeShell> {
     }));
 
     _subs.add(_firebase.chillerStream().listen((ch) {
+      _lastChiller = ch;
+      _logSnapshot();
     }));
 
     _subs.add(_firebase.dhStream().listen((dh) {
-      _logDh(dh);
+      _lastDh = dh;
+      _logSnapshot();
     }));
 
     _subs.add(_firebase.heartbeatStream().listen((hb) {
@@ -214,24 +228,42 @@ class _HomeShellState extends State<HomeShell> {
     }));
   }
 
-  void _logDh(DhTelemetry dh) async {
-    final points = await _telemetryLogger.load();
-    if (points.isNotEmpty) {
-      final last = points.last;
-      final updated = TelemetryPoint(
-        timestamp: last.timestamp,
-        supplyC: last.supplyC,
-        returnC: last.returnC,
-        coldestPipeC: last.coldestPipeC,
-        tankTempC: last.tankTempC,
-        indoorTempC: dh.tempC,
-        indoorHumidityPct: dh.humidityPct,
-        outdoorTempC: last.outdoorTempC,
-        outdoorDewPointC: last.outdoorDewPointC,
-      );
-      points.last = updated;
-      await _telemetryLogger.log(updated);
+  /// Write one telemetry point built from the latest monitor / chiller / DH
+  /// readings, so every point carries the room (DHT22) temperature and
+  /// humidity the trends charts plot. Updates arriving within
+  /// [_minLogGap] of the last write are coalesced into a single trailing
+  /// write instead of racing each other on the log file.
+  void _logSnapshot() {
+    final last = _lastLogAt;
+    final elapsed = last == null ? null : DateTime.now().difference(last);
+    if (elapsed != null && elapsed < _minLogGap) {
+      _logDebounce ??= Timer(_minLogGap - elapsed, () {
+        _logDebounce = null;
+        _writeSnapshot();
+      });
+      return;
     }
+    _writeSnapshot();
+  }
+
+  void _writeSnapshot() {
+    final m = _lastMonitor;
+    final ch = _lastChiller;
+    final dh = _lastDh;
+    if (m == null && ch == null && dh == null) return;
+    final ts = DateTime.now();
+    _lastLogAt = ts;
+    _telemetryLogger.log(TelemetryPoint(
+      timestamp: ts,
+      supplyC: m?.supplyC,
+      returnC: m?.returnC,
+      coldestPipeC: m?.coldestPipeC,
+      tankTempC: ch?.waterTempC,
+      indoorTempC: dh?.tempC,
+      indoorHumidityPct: dh?.humidityPct,
+      outdoorTempC: m?.outdoorTempC,
+      outdoorDewPointC: m?.outdoorDewPointC,
+    ));
   }
 
   void _checkAlertCount(int previousCount) async {
@@ -244,11 +276,23 @@ class _HomeShellState extends State<HomeShell> {
 
   @override
   void dispose() {
+    _logDebounce?.cancel();
+    _watchdog?.dispose();
     for (final sub in _subs) {
       sub.cancel();
     }
     _subs.clear();
     super.dispose();
+  }
+
+  /// The watchdog only makes sense once a system is linked, and it must follow
+  /// a re-link, so it is rebuilt whenever the linked id changes.
+  void _restartWatchdog() {
+    _watchdog?.dispose();
+    final id = _linkedId;
+    _watchdog = id == null
+        ? null
+        : (DeviceWatchdog(firebase: _firebase, systemId: id)..start());
   }
 
   Future<void> _load() async {
@@ -260,6 +304,7 @@ class _HomeShellState extends State<HomeShell> {
       _weatherKey = key;
       _loading = false;
     });
+    _restartWatchdog();
     if (id != null && key != null && key.isNotEmpty) {
       await _publishKey(key);
     }
@@ -283,8 +328,23 @@ class _HomeShellState extends State<HomeShell> {
     }
   }
 
+  /// The initial key for the dialog: the local copy when present, otherwise
+  /// whatever is already live in Firebase (set earlier or from another
+  /// device) - so the dialog never shows blank when the gateway has a key.
+  Future<String?> _resolveInitialKey() async {
+    final local = _weatherKey;
+    if (local != null && local.isNotEmpty) return local;
+    try {
+      return await _firebase.fetchWeatherKey();
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _manageKey() async {
-    final controller = TextEditingController(text: _weatherKey ?? '');
+    final initial = await _resolveInitialKey();
+    if (!mounted) return;
+    final controller = TextEditingController(text: initial ?? '');
     final key = await showDialog<String>(
       context: context,
       builder: (context) => _KeyDialog(controller: controller),
@@ -374,6 +434,7 @@ class _HomeShellState extends State<HomeShell> {
     await _deviceLink.save(id);
     if (!mounted) return;
     setState(() => _linkedId = id);
+    _restartWatchdog();
     if (_weatherKey != null && _weatherKey!.isNotEmpty) {
       await _publishKey(_weatherKey!);
     }
@@ -382,6 +443,7 @@ class _HomeShellState extends State<HomeShell> {
   void _onLinkedFromScreen(String id) {
     if (!mounted) return;
     setState(() => _linkedId = id);
+    _restartWatchdog();
     if (_weatherKey != null && _weatherKey!.isNotEmpty) {
       _publishKey(_weatherKey!);
     }

@@ -5,6 +5,11 @@ EspNowSendCb    EspNowTransport::_sendHandler = nullptr;
 
 bool EspNowTransport::begin() {
   WiFi.mode(WIFI_STA);
+  // Keep the radio fully awake: with WiFi power-save on (default when
+  // associated to an AP), the STA sleeps between DTIM beacons and misses the
+  // MAC-layer ACK window - ESP-NOW data is delivered but every send reports
+  // FAIL. This must run on the gateway; harmless on the peers.
+  WiFi.setSleep(false);
   if (esp_now_init() != ESP_OK) return false;
   esp_now_register_recv_cb(_recvCb);
   esp_now_register_send_cb(_sendCb);

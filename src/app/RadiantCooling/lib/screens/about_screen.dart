@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-
 import '../models/telemetry.dart';
 import '../services/radiant_firebase.dart';
 import '../widgets/app_logo.dart';
@@ -122,50 +120,6 @@ class AboutScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
 
-          SectionCard(
-            title: 'Credits',
-            icon: Icons.person_outline,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Sajed Lopez Mendoza',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Building intelligent solutions',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    OutlinedButton.icon(
-                      onPressed: () => _launchUrl(
-                        'https://github.com/qppd/radiant-cooling',
-                      ),
-                      icon: const Icon(Icons.code, size: 18),
-                      label: const Text('GitHub'),
-                    ),
-                    const SizedBox(width: 8),
-                    OutlinedButton.icon(
-                      onPressed: () => _launchUrl(
-                        'https://www.linkedin.com/in/sajed-mendoza',
-                      ),
-                      icon: const Icon(Icons.link, size: 18),
-                      label: const Text('LinkedIn'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
           Center(
             child: Text(
               'MIT License',
@@ -178,13 +132,6 @@ class AboutScreen extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  Future<void> _launchUrl(String url) async {
-    final uri = Uri.parse(url);
-    if (await canLaunchUrl(uri)) {
-      await launchUrl(uri, mode: LaunchMode.externalApplication);
-    }
   }
 }
 

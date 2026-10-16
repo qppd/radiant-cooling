@@ -27,7 +27,7 @@ class SettingsScreen extends StatelessWidget {
   final VoidCallback onAbout;
 
   Future<void> _editControlParams(BuildContext context) async {
-    final current = await firebase.controlParamsStream().first;
+    final current = await firebase.fetchControlParams();
     if (!context.mounted) return;
     final result = await showDialog<ControlParams>(
       context: context,
@@ -81,7 +81,7 @@ class SettingsScreen extends StatelessWidget {
   }
 
   Future<void> _editDhConfig(BuildContext context) async {
-    final current = await firebase.dhConfigStream().first;
+    final current = await firebase.fetchDhConfig();
     if (!context.mounted) return;
     final result = await showDialog<DhConfig>(
       context: context,
@@ -221,20 +221,41 @@ class SettingsScreen extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         Card(
-          child: ListTile(
-            leading: Icon(weatherKey == null ? Icons.key_off : Icons.key),
-            title: Text(
-              weatherKey == null ? 'No WeatherAPI key' : 'WeatherAPI key set',
-            ),
-            subtitle: const Text(
-              'Managed from this app and delivered to the gateway '
-              '(radiant/config/weather_key). The ESP32 fetches the '
-              'weather itself.',
-            ),
-            trailing: TextButton(
-              onPressed: onManageKey,
-              child: Text(weatherKey == null ? 'Set key' : 'Change'),
-            ),
+          // Reflect the key actually live in Firebase
+          // (radiant/config/weather_key), falling back to the locally stored
+          // copy; the state stays live when the key changes elsewhere.
+          child: StreamBuilder<String?>(
+            stream: firebase.weatherKeyStream(),
+            builder: (context, snap) {
+              final remote = snap.data;
+              final key =
+                  (remote != null && remote.isNotEmpty) ? remote : weatherKey;
+              final hasKey = key != null && key.isNotEmpty;
+              final masked = !hasKey
+                  ? ''
+                  : key.length <= 4
+                      ? key
+                      : '${'•' * (key.length - 4)}'
+                          '${key.substring(key.length - 4)}';
+              return ListTile(
+                leading: Icon(hasKey ? Icons.key : Icons.key_off),
+                title: Text(
+                  hasKey ? 'WeatherAPI key set' : 'No WeatherAPI key',
+                ),
+                subtitle: Text(
+                  hasKey
+                      ? 'Live in Firebase at radiant/config/weather_key · '
+                          '$masked'
+                      : 'Managed from this app and delivered to the gateway '
+                          '(radiant/config/weather_key). The ESP32 fetches '
+                          'the weather itself.',
+                ),
+                trailing: TextButton(
+                  onPressed: onManageKey,
+                  child: Text(hasKey ? 'Change' : 'Set key'),
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 12),

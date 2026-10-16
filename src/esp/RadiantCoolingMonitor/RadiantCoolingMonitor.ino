@@ -10,6 +10,7 @@
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
+#include <freertos/semphr.h>
 #include <time.h>
 
 // 4x ceiling DS18B20 - each sensor on its own 1-Wire bus (see PINS_CONFIG.h)
@@ -82,6 +83,185 @@ typedef struct {
 QueueHandle_t espNowQueue;
 
 
+// ── Firebase cloud task ───────────────────────────────────────────────────
+// ALL Firebase + HTTPS-weather work runs here on a dedicated 20 KB stack. The
+// synchronous TLS handshakes (Firebase RTDB writes, stream (re)connects and
+// the WeatherAPI fetch) overflow the 8 KB loopTask stack - that was the
+// "Stack canary watchpoint triggered (loopTask)" panic. loop() only enqueues
+// path+json pairs; this task drains them (latest write per path wins) so a
+// burst of peer telemetry costs one connection open per path, not per packet.
+typedef struct {
+  char path[96];
+  char json[512];
+} CloudWrite;
+
+QueueHandle_t cloudQueue = nullptr;
+static const uint8_t kCloudBatchMax = 8;
+// TLS handshakes (Firebase RTDB writes, stream (re)connects, WeatherAPI) need
+// far more than the 8 KB loopTask stack. This task owns them exclusively.
+static const uint32_t kCloudTaskStack = 20480;
+
+void enqueueCloudWrite(const String& path, const String& json) {
+  if (!cloudQueue) return;
+  CloudWrite item;
+  strlcpy(item.path, path.c_str(), sizeof(item.path));
+  strlcpy(item.json, json.c_str(), sizeof(item.json));
+  if (xQueueSend(cloudQueue, &item, 0) != pdTRUE) {
+    Serial.println("[cloud] queue full - write dropped (newest already queued)");
+  }
+}
+
+volatile bool wxRequestDue = false;  // set by loop()/serial 'wx', consumed by cloudTask
+unsigned long lastKeyRefreshMs = 0;  // last WeatherAPI-key pull from Firebase
+
+// The app publishes the WeatherAPI key at radiant/config/weather_key and the
+// config stream picks it up instantly - but a stream that dropped, a reboot
+// before the key existed, or a key set while the gateway was offline all left
+// the gateway with no key for good. So read the key back over REST too: retry
+// every minute while we have none, then refresh occasionally for rotations.
+void serviceWeatherKey(bool force) {
+  if (!cloud.isReady()) return;
+
+  const bool haveKey = weather.hasKey();
+  const uint32_t intervalMs = (haveKey ? WEATHER_KEY_REFRESH_S : WEATHER_KEY_RETRY_S) * 1000UL;
+  if (!force && millis() - lastKeyRefreshMs < intervalMs) return;
+  lastKeyRefreshMs = millis();
+
+  String key;
+  if (!cloud.readString(RadiantFirebaseConfig::getConfigWeatherKeyPath(), key)) {
+    if (!haveKey) {
+      Serial.println("[weather] no WeatherAPI key yet - check radiant/config/weather_key "
+                     "(set it in the app) and that this gateway may read it");
+    }
+    return;
+  }
+  if (strcmp(key.c_str(), weather.key()) == 0) return;
+
+  weather.setKey(key.c_str());
+  Serial.printf("[weather] API key %s from Firebase (%u chars)\n",
+                haveKey ? "rotated" : "loaded", (unsigned)key.length());
+}
+
+// Publish the reading to its own node so the app has live outdoor weather
+// without waiting for the 30 s monitor telemetry cycle.
+void publishWeather(const WeatherConditions& wx) {
+  JsonDocument doc;
+  doc["location"]     = WEATHER_LOCATION;
+  doc["temp_c"]       = wx.tempC;
+  doc["feels_like_c"] = wx.feelsLikeC;
+  doc["humidity_pct"] = wx.humidityPct;
+  doc["dew_point_c"]  = wx.dewPointC;
+  doc["wind_kph"]     = wx.windKph;
+  doc["condition"]    = wx.condition;
+  doc["is_day"]       = wx.isDay;
+  doc["obs_epoch"]    = wx.obsEpoch;
+  doc["ts"]           = nowUnix();  // required by the database rules
+  char json[448];
+  serializeJson(doc, json, sizeof(json));
+  cloud.setJson(
+    String(RadiantFirebaseConfig::getTelemetryBasePath()) + "/weather/latest",
+    json);
+}
+
+void doWeatherFetch() {
+  WeatherConditions wx = weather.fetch();
+  if (wx.ok) {
+    inputs.outdoorTempC     = wx.tempC;
+    inputs.outdoorDewPointC = wx.dewPointC;
+    outdoorHumidityPct      = wx.humidityPct;
+    weatherValid            = true;
+    lastWeatherUpdateMs     = millis();
+    Serial.printf("[weather] ok: temp=%.1fC dewpoint=%.1fC\n",
+                  inputs.outdoorTempC, inputs.outdoorDewPointC);
+    publishWeather(wx);
+  } else {
+    Serial.println("[weather] fetch failed (key missing or network error)");
+    lastKeyRefreshMs = 0;  // the key may have just been set - re-read at once
+  }
+}
+
+void cloudTask(void*) {
+  // Token handshake + stream TLS handshakes happen here (needs the big stack).
+  cloud.begin();
+
+  // Heap-allocated: kCloudBatchMax * sizeof(CloudWrite) is ~4.8 KB that must
+  // not sit on the same stack the TLS handshake needs.
+  CloudWrite* batch = (CloudWrite*)malloc(kCloudBatchMax * sizeof(CloudWrite));
+  if (!batch) {
+    Serial.println("[cloud] batch alloc failed - cloud task stopped");
+    vTaskDelete(nullptr);
+    return;
+  }
+
+  // cloud.begin() gives up after its 5 boot attempts. Keep retrying from here
+  // (WiFi only) so a transient DNS/TLS failure at boot does not leave the
+  // gateway silent until someone power-cycles it.
+  uint32_t lastInitAttemptMs = millis();
+
+  for (;;) {
+    if (!cloud.isReady() && WiFi.status() == WL_CONNECTED &&
+        millis() - lastInitAttemptMs >= 60000UL) {
+      lastInitAttemptMs = millis();
+      Serial.println("[cloud] Firebase not ready - re-initializing");
+      cloud.begin();
+    }
+
+    cloud.loop();  // stream reads + reconnects + user stream callbacks
+
+    if (wxRequestDue) {
+      wxRequestDue = false;
+      serviceWeatherKey(true);  // the user asked - don't wait for the retry timer
+      doWeatherFetch();
+    } else {
+      serviceWeatherKey(false);
+    }
+
+    int n = 0;
+    while (n < kCloudBatchMax &&
+           xQueueReceive(cloudQueue, &batch[n], 0) == pdTRUE) {
+      n++;
+    }
+    if (n == 0) {
+      // Idle: block up to 200 ms so the stream is still serviced promptly.
+      if (xQueueReceive(cloudQueue, &batch[n], 200) == pdTRUE) n++;
+    }
+
+    // Write the batch, but skip entries superseded by a newer write to the
+    // same path (latest wins) - bounds the number of connection opens.
+    for (int i = 0; i < n; i++) {
+      bool superseded = false;
+      for (int j = i + 1; j < n; j++) {
+        if (strcmp(batch[i].path, batch[j].path) == 0) {
+          superseded = true;
+          break;
+        }
+      }
+      if (!superseded) cloud.setJson(batch[i].path, batch[i].json);
+    }
+    if (n > 0) vTaskDelay(pdMS_TO_TICKS(50));  // pace the connection opens
+  }
+}
+
+// lastCtrlMode is a heap String written from the cloud task (control stream
+// callback) and read from loopTask - guard it with a mutex.
+SemaphoreHandle_t modeMutex = nullptr;
+
+String getCtrlMode() {
+  if (!modeMutex) return lastCtrlMode;
+  xSemaphoreTake(modeMutex, portMAX_DELAY);
+  String s = lastCtrlMode;
+  xSemaphoreGive(modeMutex);
+  return s;
+}
+
+void setCtrlMode(const String& m) {
+  if (!modeMutex) { lastCtrlMode = m; return; }
+  xSemaphoreTake(modeMutex, portMAX_DELAY);
+  lastCtrlMode = m;
+  xSemaphoreGive(modeMutex);
+}
+
+
 uint32_t nowUnix() {
   time_t t = time(nullptr);
   return t > 1000000000UL ? (uint32_t)t : (uint32_t)(millis() / 1000UL);
@@ -128,12 +308,12 @@ void handleIncoming(IncomingMessage& msg) {
                   "/" + msg.src + "/latest";
     char json[512];
     serializeJson(msg.data, json, sizeof(json));
-    cloud.setJson(path.c_str(), json);
+    enqueueCloudWrite(path, json);
   } else if (msg.type == MsgType::State) {
     String path = String(RadiantFirebaseConfig::getStateBasePath()) + "/" + msg.src;
     char json[256];
     serializeJson(msg.data, json, sizeof(json));
-    cloud.setJson(path.c_str(), json);
+    enqueueCloudWrite(path, json);
   } else if (msg.type == MsgType::Status && msg.src == "chiller") {
     sendPumpCmd(pumpsOn);
   }
@@ -164,6 +344,7 @@ void onConfigStream(MultiPathStream stream) {
     key.trim();
     if (key.length() > 0) {
       weather.setKey(key.c_str());
+      lastKeyRefreshMs = millis();  // no need for the REST re-read now
       Serial.println("[config] weather key updated");
     }
   }
@@ -226,10 +407,11 @@ void onControlStream(MultiPathStream stream) {
     newMode.replace("\"", "");
     newMode.trim();
 
-    if (newMode != lastCtrlMode) {
+    String currentMode = getCtrlMode();
+    if (newMode != currentMode) {
       Serial.printf("[control] Mode changed: '%s' -> '%s'\n",
-                    lastCtrlMode.c_str(), newMode.c_str());
-      lastCtrlMode = newMode;
+                    currentMode.c_str(), newMode.c_str());
+      setCtrlMode(newMode);
 
       if (newMode == "manual") {
         Serial.println("[control] Switched to MANUAL mode");
@@ -415,37 +597,26 @@ void handleSerialCommand() {
     }
 
   } else if (cmd == "wifi") {
-    Serial.printf("[test] wifi %s | ssid=%s | ip=%s | rssi=%d dBm | mac=%s\n",
+    Serial.printf("[test] wifi %s | ssid=%s | ip=%s | rssi=%d dBm | ch=%u | mac=%s\n",
                   wifi.connected() ? "CONNECTED" : "DISCONNECTED",
                   WiFi.SSID().c_str(),
                   wifi.localIP().c_str(),
                   WiFi.RSSI(),
+                  (unsigned)WiFi.channel(),
                   WiFi.macAddress().c_str());
 
   } else if (cmd == "wx") {
-    Serial.println("[test] fetching outdoor weather...");
+    Serial.println("[test] fetching outdoor weather (on the cloud task)...");
     if (!weather.hasKey()) {
       Serial.println("[test] warning: no weather API key stored (set /weather_key in Firebase)");
     }
-    WeatherConditions w = weather.fetch();
-    if (w.ok) {
-      inputs.outdoorTempC      = w.tempC;
-      inputs.outdoorDewPointC  = w.dewPointC;
-      outdoorHumidityPct       = w.humidityPct;
-      weatherValid             = true;
-      lastWeatherMs            = millis();
-      lastWeatherUpdateMs      = millis();
-      Serial.printf("[test] weather OK: temp=%.1f C humidity=%.1f %% dewpoint=%.1f C\n",
-                    w.tempC, w.humidityPct, w.dewPointC);
-    } else {
-      Serial.println("[test] weather fetch FAILED (key missing, invalid, or no internet)");
-    }
+    wxRequestDue = true;  // HTTPS fetch must run on the cloud task, not here
 
   } else if (cmd.startsWith("mode ")) {
     String m = cmd.substring(5);
     m.trim();
     if (m == "manual" || m == "auto") {
-      lastCtrlMode = m;
+      setCtrlMode(m);
       Serial.printf("[test] mode -> %s\n", m.c_str());
       if (m == "manual") Serial.println("[test] auto pump control is now suspended");
     } else {
@@ -459,7 +630,7 @@ void handleSerialCommand() {
       bool on = (v == "on");
       pumpsOn = on;
       sendPumpCmd(on);
-      if (lastCtrlMode != "manual") {
+      if (getCtrlMode() != "manual") {
         Serial.println("[test] note: mode is AUTO - control loop may override this; send 'mode manual' first");
       }
     } else {
@@ -483,9 +654,10 @@ void handleSerialCommand() {
     }
 
   } else if (cmd == "status") {
+    String mode = getCtrlMode();
     Serial.println("=== RadiantCoolingMonitor status ===");
     Serial.printf("mode=%s  pumps=%s  weather=%s\n",
-                  lastCtrlMode.length() > 0 ? lastCtrlMode.c_str() : "auto",
+                  mode.length() > 0 ? mode.c_str() : "auto",
                   pumpsOn ? "on" : "off",
                   weatherValid ? "valid" : "stale");
     Serial.printf("supply=%.2f C  return=%.2f C  coldest_pipe=%.2f C  water=%.2f C\n",
@@ -513,6 +685,8 @@ void setup() {
   Serial.begin(115200);
 
   espNowQueue = xQueueCreate(8, sizeof(EspNowRxPacket));
+  cloudQueue  = xQueueCreate(kCloudBatchMax * 2, sizeof(CloudWrite));
+  modeMutex   = xSemaphoreCreateMutex();
 
   beginCeilings();
 
@@ -521,6 +695,19 @@ void setup() {
     ESP.restart();
   }
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+
+  // ESP-NOW only works when every board is on one channel: the gateway always
+  // follows the router, and the peers pin theirs to ESP_NOW_CHANNEL.
+  if (WiFi.channel() != ESP_NOW_CHANNEL) {
+    Serial.printf("[espnow] CHANNEL MISMATCH: AP on ch%u, peers pinned to ch%u - "
+                  "every ESP-NOW send will FAIL. Set the router to channel %u, "
+                  "or change ESP_NOW_CHANNEL in Config.h and reflash the peers.\n",
+                  (unsigned)WiFi.channel(), (unsigned)ESP_NOW_CHANNEL,
+                  (unsigned)ESP_NOW_CHANNEL);
+  } else {
+    Serial.printf("[espnow] channel %u matches ESP_NOW_CHANNEL\n",
+                  (unsigned)WiFi.channel());
+  }
 
   if (!espNow.begin()) {
     Serial.println("ESP-NOW init failed");
@@ -537,8 +724,9 @@ void setup() {
   cloud.setConfigStreamHandler(onConfigStream);
   cloud.setControlStreamHandler(onControlStream);
 
-  // Initialize Firebase (handles WiFi check, auth, streams)
-  cloud.begin();
+  // Firebase (auth + token + stream TLS handshakes) and the WeatherAPI HTTPS
+  // fetch run ONLY on the cloud task - never on this 8 KB loopTask stack.
+  xTaskCreate(cloudTask, "cloud", kCloudTaskStack, nullptr, 1, nullptr);
 }
 
 void loop() {
@@ -546,8 +734,6 @@ void loop() {
 
   wifi.handleResetButton(WIFI_RESET_HOLD_MS);
   wifi.reconnectIfLost();
-
-  cloud.loop();
 
   requestCeilingTemps();
   delay(750);
@@ -568,18 +754,7 @@ void loop() {
 
   if (weather.hasKey() && millis() - lastWeatherMs >= WEATHER_POLL_S * 1000UL) {
     lastWeatherMs = millis();
-    WeatherConditions wx = weather.fetch();
-    if (wx.ok) {
-      inputs.outdoorTempC      = wx.tempC;
-      inputs.outdoorDewPointC  = wx.dewPointC;
-      outdoorHumidityPct       = wx.humidityPct;
-      weatherValid = true;
-      lastWeatherUpdateMs = millis();
-      Serial.printf("[weather] ok: temp=%.1f dewpoint=%.1f\n",
-                    inputs.outdoorTempC, inputs.outdoorDewPointC);
-    } else {
-      Serial.println("[weather] fetch failed (key missing or invalid)");
-    }
+    wxRequestDue = true;  // HTTPS fetch runs on the cloud task (big stack)
   }
 
   if (weatherValid && millis() - lastWeatherUpdateMs >= WEATHER_STALE_S * 1000UL) {
@@ -593,7 +768,7 @@ void loop() {
   ControlDecision d = ClimateControl::decidePumps(inputs, params, pumpsOn);
 
   // Only auto-control pumps when in auto mode (or no mode set yet)
-  if (lastCtrlMode != "manual") {
+  if (getCtrlMode() != "manual") {
     if (d.pumpsOn != pumpsOn) {
       pumpsOn = d.pumpsOn;
       sendPumpCmd(pumpsOn);
@@ -618,14 +793,17 @@ void loop() {
     tel["dew_point_c"]    = d.refDewPointC;
     tel["water_floor_c"]  = d.waterFloorC;
     tel["pumps"]          = pumpsOn ? "on" : "off";
-    tel["mode"]           = lastCtrlMode.length() > 0 ? lastCtrlMode : "auto";
+    String mode = getCtrlMode();
+    tel["mode"]           = mode.length() > 0 ? mode : "auto";
     tel["ts"]             = nowUnix();
     char json[512];
     serializeJson(tel, json, sizeof(json));
-    cloud.setJson(
+    enqueueCloudWrite(
       String(RadiantFirebaseConfig::getTelemetryBasePath()) + "/monitor/latest",
       json);
 
+    // Heartbeat and device-registry entries carry the same payload - build it
+    // once and let the cloud task write both paths in one batch.
     JsonDocument hb;
     hb["online"]    = true;
     hb["firmware"]  = "0.1.0";
@@ -634,19 +812,10 @@ void loop() {
     hb["ts"]        = nowUnix();
     char hbJson[256];
     serializeJson(hb, hbJson, sizeof(hbJson));
-    cloud.setJson(RadiantFirebaseConfig::getHeartbeatPath(), hbJson);
-
-    JsonDocument dev;
-    dev["online"]    = true;
-    dev["firmware"]  = "0.1.0";
-    dev["channel"]   = WiFi.channel();
-    dev["device_id"] = SYSTEM_ID;
-    dev["ts"]        = nowUnix();
-    char devJson[256];
-    serializeJson(dev, devJson, sizeof(devJson));
-    cloud.setJson(
+    enqueueCloudWrite(RadiantFirebaseConfig::getHeartbeatPath(), hbJson);
+    enqueueCloudWrite(
       String(RadiantFirebaseConfig::getDevicesBasePath()) + "/" + SYSTEM_ID,
-      devJson);
+      hbJson);
   }
 
   delay(100);

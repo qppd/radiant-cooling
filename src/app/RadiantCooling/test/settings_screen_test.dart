@@ -99,6 +99,21 @@ void main() {
     expect(keyManaged, isTrue);
   });
 
+  testWidgets('reflects a weather key that is already live in Firebase '
+      'even when nothing is stored on the phone', (tester) async {
+    final firebase = FakeRadiantFirebase(
+      controlParams: const ControlParams(),
+      dhConfig: const DhConfig(),
+      weatherKey: '64812e322c3f4b42af7135146252012',
+    );
+    await pumpSettings(tester, firebase, linkedId: null, weatherKey: null);
+
+    expect(find.text('WeatherAPI key set'), findsOneWidget);
+    expect(find.textContaining('••••2012'), findsOneWidget);
+    expect(find.text('Change'), findsOneWidget);
+    expect(find.text('No WeatherAPI key'), findsNothing);
+  });
+
   testWidgets('shows current control params and dehumidifier target from the '
       'streams', (tester) async {
     final firebase = FakeRadiantFirebase(

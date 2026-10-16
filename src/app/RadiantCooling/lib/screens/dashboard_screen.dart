@@ -46,6 +46,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String _fmt(double? v, {int digits = 1}) =>
       v == null || v <= -90 ? '—' : '${v.toStringAsFixed(digits)} °C';
 
+  String _pct(double? v) =>
+      v == null || v <= 0 ? '—' : '${v.toStringAsFixed(0)} %';
+
   String _time(int? ts) {
     if (ts == null) return '—';
     final t = DateTime.fromMillisecondsSinceEpoch(ts * 1000).toLocal();
@@ -100,24 +103,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 12),
           SectionCard(
+            title: 'Room climate',
+            icon: Icons.thermostat_outlined,
+            child: StreamBuilder<DhTelemetry>(
+              stream: widget.firebase.dhStream(),
+              builder: (context, dhSnap) {
+                final dh = dhSnap.data;
+                return StreamBuilder<DhState>(
+                  stream: widget.firebase.dhStateStream(),
+                  builder: (context, stSnap) {
+                    final dehumOn = stSnap.data?.on ?? false;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MetricRow(
+                          children: [
+                            _Metric(
+                              label: 'Temperature',
+                              value: _fmt(dh?.tempC),
+                              highlighted: true,
+                            ),
+                            _Metric(
+                              label: 'Humidity',
+                              value: _pct(dh?.humidityPct),
+                              highlighted: true,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        _StatusTile(label: 'Dehumidifier', on: dehumOn),
+                      ],
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 12),
+          SectionCard(
             title: 'Outdoor weather',
             icon: Icons.wb_sunny_outlined,
-            child: StreamBuilder<MonitorTelemetry>(
-              stream: widget.firebase.monitorStream(),
-              builder: (context, snap) {
-                final t = snap.data;
-                return _MetricRow(
-                  children: [
-                    _Metric(label: 'Temp', value: _fmt(t?.outdoorTempC)),
-                    _Metric(
-                        label: 'Dew point', value: _fmt(t?.outdoorDewPointC)),
-                    _Metric(
-                      label: 'Humidity',
-                      value: (t?.outdoorHumidityPct ?? 0) <= -90
-                          ? '—'
-                          : '${(t?.outdoorHumidityPct ?? 0).toStringAsFixed(0)} %',
-                    ),
-                  ],
+            // The gateway publishes its WeatherAPI reading to its own node;
+            // fall back to the outdoor_* fields inside monitor telemetry for
+            // a gateway that has not been reflashed yet.
+            child: StreamBuilder<WeatherNow>(
+              stream: widget.firebase.weatherStream(),
+              builder: (context, wSnap) {
+                final wx = wSnap.data;
+                return StreamBuilder<MonitorTelemetry>(
+                  stream: widget.firebase.monitorStream(),
+                  builder: (context, snap) {
+                    final t = snap.data;
+                    final tempC = wx?.tempC ?? t?.outdoorTempC;
+                    final dewC = wx?.dewPointC ?? t?.outdoorDewPointC;
+                    final humidity = wx?.humidityPct ?? t?.outdoorHumidityPct;
+                    final condition = wx?.condition;
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MetricRow(
+                          children: [
+                            _Metric(label: 'Temp', value: _fmt(tempC)),
+                            _Metric(label: 'Dew point', value: _fmt(dewC)),
+                            _Metric(
+                                label: 'Humidity', value: _pct(humidity)),
+                          ],
+                        ),
+                        if (condition != null && condition.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            '$condition · feels like '
+                            '${_fmt(wx?.feelsLikeC)}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .outline,
+                                ),
+                          ),
+                        ],
+                      ],
+                    );
+                  },
                 );
               },
             ),
@@ -167,6 +236,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         i < temps.length && i < labels.length;
                         i++)
                       _Metric(label: labels[i], value: _fmt(temps[i])),
+                    _Metric(label: 'Delta T', value: _fmt(t?.deltaTC)),
                   ],
                 );
               },
@@ -177,122 +247,92 @@ class _DashboardScreenState extends State<DashboardScreen> {
           SectionCard(
             title: 'Control',
             icon: Icons.power_settings_new,
-            child: StreamBuilder<ChillerState>(
-              stream: widget.firebase.chillerStateStream(),
-              builder: (context, chSnap) {
-                return StreamBuilder<DhTelemetry>(
-                  stream: widget.firebase.dhStream(),
-                  builder: (context, dhSnap) {
-                    final dh = dhSnap.data;
-                    return StreamBuilder<DhState>(
-                      stream: widget.firebase.dhStateStream(),
-                      builder: (context, stSnap) {
-                        final dehumOn = stSnap.data?.on ?? false;
-                        return StreamBuilder<MonitorTelemetry>(
-                          stream: widget.firebase.monitorStream(),
-                          builder: (context, monSnap) {
-                            final te = monSnap.data;
-                            final pumpsOn = te?.pumpsOn ?? false;
-                            final mode = te?.mode ?? 'auto';
+            // Streamed straight off the control node the app writes, so a
+            // toggle is reflected immediately instead of after the next 30 s
+            // telemetry cycle. Monitor telemetry stays the source for what
+            // the gateway decided on its own.
+            child: StreamBuilder<ControlState>(
+              stream: widget.firebase.controlStream(widget.linkedId!),
+              builder: (context, ctrlSnap) {
+                final ctrl = ctrlSnap.data;
+                return StreamBuilder<MonitorTelemetry>(
+                  stream: widget.firebase.monitorStream(),
+                  builder: (context, monSnap) {
+                    final te = monSnap.data;
+                    final mode = ctrl?.mode ?? te?.mode ?? 'auto';
+                    final pumpsOn = mode == 'manual'
+                        ? (ctrl?.pumpsOn ?? te?.pumpsOn ?? false)
+                        : (te?.pumpsOn ?? ctrl?.pumpsOn ?? false);
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Text('Pumps',
+                                style: TextStyle(fontWeight: FontWeight.w500)),
+                            const Text('Mode',
+                                style: TextStyle(fontWeight: FontWeight.w500)),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: !pumpsOn
+                                    ? () => _togglePumps(context, true)
+                                    : null,
+                                icon:
+                                    const Icon(Icons.power, size: 18),
+                                label: const Text('Pumps ON'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: pumpsOn
+                                    ? () => _togglePumps(context, false)
+                                    : null,
+                                icon: const Icon(Icons.power_off, size: 18),
+                                label: const Text('Pumps OFF'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: ['auto', 'manual']
+                              .map((m) => ChoiceChip(
+                                    label: Text(m),
+                                    selected: mode == m,
+                                    onSelected: (sel) {
+                                      if (sel) _toggleMode(context, m);
+                                    },
+                                  ))
+                              .toList(),
+                        ),
+                        const Divider(height: 24),
+                        StreamBuilder<ChillerState>(
+                          stream: widget.firebase.chillerStateStream(),
+                          builder: (context, c2) {
+                            final s = c2.data;
                             return Column(
-                              crossAxisAlignment:
-                                  CrossAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    const Text('Pumps',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w500)),
-                                    const Text('Mode',
-                                        style: TextStyle(
-                                            fontWeight: FontWeight.w500)),
-                                  ],
-                                ),
+                                _StatusTile(
+                                    label: 'Compressor',
+                                    on: s?.compressorOn ?? false),
                                 const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: !pumpsOn
-                                            ? () => _togglePumps(context, true)
-                                            : null,
-                                        icon: const Icon(Icons.power,
-                                            size: 18),
-                                        label: const Text('Pumps ON'),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: pumpsOn
-                                            ? () => _togglePumps(context, false)
-                                            : null,
-                                        icon: const Icon(Icons.power_off,
-                                            size: 18),
-                                        label: const Text('Pumps OFF'),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 12),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: ['auto', 'manual']
-                                      .map((m) => ChoiceChip(
-                                            label: Text(m),
-                                            selected: mode == m,
-                                            onSelected: (sel) {
-                                              if (sel) _toggleMode(context, m);
-                                            },
-                                          ))
-                                      .toList(),
-                                ),
-                                const Divider(height: 24),
-                                StreamBuilder<ChillerState>(
-                                  stream:
-                                      widget.firebase.chillerStateStream(),
-                                  builder: (context, c2) {
-                                    final s = c2.data;
-                                    return Column(
-                                      children: [
-                                        _StatusTile(
-                                            label: 'Compressor',
-                                            on: s?.compressorOn ?? false),
-                                        const SizedBox(height: 8),
-                                        _StatusTile(
-                                            label: 'Water pump',
-                                            on: s?.pump1On ?? false),
-                                        const SizedBox(height: 8),
-                                        _StatusTile(
-                                            label: 'Dehumidifier',
-                                            on: dehumOn),
-                                      ],
-                                    );
-                                  },
-                                ),
-                                const SizedBox(height: 12),
-                                _MetricRow(
-                                  children: [
-                                    _Metric(
-                                      label: 'Indoor temp',
-                                      value: _fmt(dh?.tempC),
-                                    ),
-                                    _Metric(
-                                      label: 'Indoor humidity',
-                                      value: (dh?.humidityPct ?? 0) <= 0
-                                          ? '—'
-                                          : '${(dh?.humidityPct ?? 0).toStringAsFixed(0)} %',
-                                    ),
-                                  ],
-                                ),
+                                _StatusTile(
+                                    label: 'Water pump',
+                                    on: s?.pump1On ?? false),
                               ],
                             );
                           },
-                        );
-                      },
+                        ),
+                      ],
                     );
                   },
                 );

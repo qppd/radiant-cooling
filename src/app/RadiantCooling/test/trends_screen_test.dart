@@ -63,11 +63,12 @@ void main() {
     await tester.pump();
 
     expect(find.text('Pipe temperatures'), findsOneWidget);
-    expect(find.text('Indoor climate'), findsOneWidget);
+    expect(find.text('Room climate'), findsOneWidget);
     expect(find.text('Outdoor weather'), findsOneWidget);
     expect(find.byType(LineChart), findsWidgets);
 
     expect(find.text('Supply temperature summary'), findsOneWidget);
+    expect(find.text('Room summary'), findsOneWidget);
     expect(find.text('Points'), findsOneWidget);
   });
 

@@ -16,6 +16,16 @@ static const char   WEATHER_LOCATION[] = "Manila";
 static const uint32_t WEATHER_POLL_S   = 900;
 static const uint32_t WEATHER_STALE_S  = 3600;
 
+// WeatherAPI key: re-read over REST while we have none (the app may not have
+// published it yet) and refresh it occasionally to catch a rotation.
+static const uint32_t WEATHER_KEY_RETRY_S   = 60;
+static const uint32_t WEATHER_KEY_REFRESH_S = 3600;
+
+// Channel the peers pin their radios to (their ESP_NOW_CHANNEL). The gateway
+// itself always follows the router, so if WiFi.channel() differs from this
+// at boot, ESP-NOW sends between the boards fail with no ACK.
+static const uint8_t ESP_NOW_CHANNEL = 1;
+
 static const uint8_t IDX_SUPPLY = 0;
 static const uint8_t IDX_RETURN = 1;
 

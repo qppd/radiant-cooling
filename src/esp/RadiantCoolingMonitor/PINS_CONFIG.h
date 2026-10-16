@@ -7,6 +7,6 @@
 static const uint8_t PIN_TEMP_CEILING_1 = 23;
 static const uint8_t PIN_TEMP_CEILING_2 = 21;
 static const uint8_t PIN_TEMP_CEILING_3 = 18;
-static const uint8_t PIN_TEMP_CEILING_4 = 19;
+static const uint8_t PIN_TEMP_CEILING_4 = 5;
 
 static const uint8_t PIN_WIFI_RESET_BUTTON = 25;

@@ -45,6 +45,11 @@ WeatherConditions WeatherApi::fetch() {
   out.tempC       = cur["temp_c"]     | 0.0f;
   out.humidityPct = cur["humidity"]   | 0.0f;
   out.dewPointC   = cur["dewpoint_c"] | 0.0f;
+  out.feelsLikeC  = cur["feelslike_c"] | 0.0f;
+  out.windKph     = cur["wind_kph"]    | 0.0f;
+  out.isDay       = (cur["is_day"] | 1) != 0;
+  out.obsEpoch    = cur["last_updated_epoch"] | 0U;
+  strlcpy(out.condition, cur["condition"]["text"] | "", sizeof(out.condition));
   out.ok          = true;
 
   http.end();

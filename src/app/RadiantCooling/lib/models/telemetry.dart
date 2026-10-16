@@ -135,6 +135,54 @@ class ChillerState {
       );
 }
 
+/// Outdoor conditions the gateway publishes to
+/// `radiant/telemetry/weather/latest` right after each WeatherAPI fetch.
+class WeatherNow {
+  const WeatherNow({
+    this.location,
+    this.tempC,
+    this.feelsLikeC,
+    this.humidityPct,
+    this.dewPointC,
+    this.windKph,
+    this.condition,
+    this.isDay = true,
+    this.obsEpoch,
+    this.ts,
+  });
+
+  final String? location;
+  final double? tempC;
+  final double? feelsLikeC;
+  final double? humidityPct;
+  final double? dewPointC;
+  final double? windKph;
+  final String? condition;
+  final bool isDay;
+
+  /// When WeatherAPI observed the reading (epoch seconds).
+  final int? obsEpoch;
+
+  /// When the gateway published it (epoch seconds).
+  final int? ts;
+
+  /// True when the node carried no usable reading yet.
+  bool get isEmpty => tempC == null && dewPointC == null;
+
+  factory WeatherNow.fromMap(Map<dynamic, dynamic>? m) => WeatherNow(
+        location: m?['location'] as String?,
+        tempC: _num(m, 'temp_c'),
+        feelsLikeC: _num(m, 'feels_like_c'),
+        humidityPct: _num(m, 'humidity_pct'),
+        dewPointC: _num(m, 'dew_point_c'),
+        windKph: _num(m, 'wind_kph'),
+        condition: m?['condition'] as String?,
+        isDay: m?['is_day'] != false,
+        obsEpoch: m?['obs_epoch'] is int ? m!['obs_epoch'] as int : null,
+        ts: m?['ts'] is int ? m!['ts'] as int : null,
+      );
+}
+
 class Heartbeat {
   const Heartbeat({this.online = false, this.deviceId, this.ts});
 

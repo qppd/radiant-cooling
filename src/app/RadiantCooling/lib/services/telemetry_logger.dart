@@ -60,6 +60,11 @@ class TelemetryLogger {
   static const _maxAge = Duration(days: 7);
   static const _maxPoints = 20160;
 
+  // Serializes log() calls: each does a full load-modify-write of the file,
+  // so overlapping calls (e.g. the monitor and DH streams firing together)
+  // would otherwise read the same snapshot and silently drop points.
+  Future<void> _pendingWrite = Future<void>.value();
+
   Future<File> _getFile() async {
     if (_file != null) return _file!;
     final dir = await getApplicationDocumentsDirectory();
@@ -80,7 +85,15 @@ class TelemetryLogger {
     }
   }
 
-  Future<void> log(TelemetryPoint point) async {
+  Future<void> log(TelemetryPoint point) {
+    final done = _pendingWrite.then((_) => _append(point));
+    // Keep the chain alive after a failed write; surface the error to the
+    // caller of this log() only.
+    _pendingWrite = done.catchError((_) {});
+    return done;
+  }
+
+  Future<void> _append(TelemetryPoint point) async {
     final points = List<TelemetryPoint>.from(await load());
     points.add(point);
 

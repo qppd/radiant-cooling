@@ -127,7 +127,7 @@ class _TrendsScreenState extends State<TrendsScreen> {
         const SizedBox(height: 12),
 
         SectionCard(
-          title: 'Indoor climate',
+          title: 'Room climate',
           icon: Icons.home_outlined,
           child: Column(
             children: [
@@ -162,6 +162,9 @@ class _TrendsScreenState extends State<TrendsScreen> {
             ],
           ),
         ),
+        const SizedBox(height: 12),
+
+        _RoomSummary(points: _points),
         const SizedBox(height: 12),
 
         SectionCard(
@@ -337,6 +340,76 @@ class _SummaryStats extends StatelessWidget {
           _Stat(label: 'Points', value: '$count'),
         ],
       ),
+    );
+  }
+}
+
+/// Min / avg / max for the room (DHT22) temperature and humidity over the
+/// selected window.
+class _RoomSummary extends StatelessWidget {
+  const _RoomSummary({required this.points});
+  final List<TelemetryPoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    double? tMin, tMax, tSum;
+    int tCount = 0;
+    double? hMin, hMax, hSum;
+    int hCount = 0;
+    for (final p in points) {
+      final t = p.indoorTempC;
+      if (t != null) {
+        if (tMin == null || t < tMin) tMin = t;
+        if (tMax == null || t > tMax) tMax = t;
+        tSum = (tSum ?? 0) + t;
+        tCount++;
+      }
+      final h = p.indoorHumidityPct;
+      if (h != null) {
+        if (hMin == null || h < hMin) hMin = h;
+        if (hMax == null || h > hMax) hMax = h;
+        hSum = (hSum ?? 0) + h;
+        hCount++;
+      }
+    }
+    if (tCount == 0 && hCount == 0) return const SizedBox.shrink();
+
+    return SectionCard(
+      title: 'Room summary',
+      icon: Icons.analytics_outlined,
+      child: Column(
+        children: [
+          if (tCount > 0)
+            _statRow('Temperature', '°C', tMin, tSum! / tCount, tMax),
+          if (tCount > 0 && hCount > 0) const SizedBox(height: 12),
+          if (hCount > 0)
+            _statRow('Humidity', '%', hMin, hSum! / hCount, hMax),
+        ],
+      ),
+    );
+  }
+
+  Widget _statRow(
+    String label,
+    String unit,
+    double? min,
+    double avg,
+    double? max,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.w500)),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _Stat(label: 'Min', value: '${min!.toStringAsFixed(1)} $unit'),
+            _Stat(label: 'Avg', value: '${avg.toStringAsFixed(1)} $unit'),
+            _Stat(label: 'Max', value: '${max!.toStringAsFixed(1)} $unit'),
+          ],
+        ),
+      ],
     );
   }
 }

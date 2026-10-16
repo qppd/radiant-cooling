@@ -9,9 +9,10 @@ typedef void (*EspNowSendCb)(const uint8_t* mac, bool success);
 
 class EspNowTransport {
 public:
-  bool begin();
+  bool begin(uint8_t channel = 0);
   bool addPeer(const uint8_t* mac, uint8_t channel = 0);
   bool sendTo(const uint8_t* mac, const uint8_t* data, size_t len);
+  static uint8_t channel();
   void onReceive(EspNowReceiveCb cb);
   void onSend(EspNowSendCb cb);
 
