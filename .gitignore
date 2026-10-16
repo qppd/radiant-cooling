@@ -114,3 +114,10 @@ src/esp/**/FirebaseConfig.cpp
 lib/config/app_config.dart
 # ===== Build artifacts (APK) =====
 installer/*.apk
+
+# ===== 3D print files (keep sources in models/, ignore slicer outputs) =====
+*.stl
+*.gcode
+*.gco
+*.g
+!models/*.png
