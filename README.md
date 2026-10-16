@@ -23,6 +23,7 @@
 - [Features](#features)
 - [System Architecture](#system-architecture)
 - [Hardware](#hardware)
+- [3D Models](#3d-models)
 - [Repository Structure](#repository-structure)
 - [Getting Started](#getting-started)
   - [Firmware](#firmware)
@@ -110,6 +111,31 @@ All pins are boot/Wi-Fi-safe for the 38-pin ESP32 variant — see the
 Each board is powered by its **own** AC-DC supply (**220 V AC → 5 V DC,
 3 A**, feeding the `5V`/`VIN` pin) — no shared rail between boards, see
 [`references/power-supply.md`](references/power-supply.md).
+
+## 3D Models
+
+Enclosures and mounts designed for the system (STL/GCODE sources kept local;
+renders below).
+
+### RadiantCooling Monitor — Board Case & Cover
+
+| | | |
+| :-: | :-: | :-: |
+| ![Case & Cover](models/RadiantCooling_Monitor_Board_Case_And_Cover.png) | ![Case & Cover 2](models/RadiantCooling_Monitor_Board_Case_And_Cover_2.png) | ![Case & Cover 3](models/RadiantCooling_Monitor_Board_Case_And_Cover_3.png) |
+| ![Case & Cover 4](models/RadiantCooling_Monitor_Board_Case_And_Cover_4.png) | ![Case & Cover 5](models/RadiantCooling_Monitor_Board_Case_And_Cover_5.png) | |
+
+### Dehumidifier Controller Case
+
+| | |
+| :-: | :-: |
+| ![Dehumidifier controller](models/dehumidifier_controller.png) | ![Dehumidifier front](models/dehumidifier_controller_front.png) |
+| ![Dehumidifier left slide](models/dehumidifier_controller_left_slide.png) | |
+
+### Water Chiller
+
+| |
+| :-: |
+| ![Water chiller](models/RadiantCooling_WaterChiller.png) |
 
 ## Repository Structure
 
