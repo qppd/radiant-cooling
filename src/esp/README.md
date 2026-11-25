@@ -29,6 +29,7 @@ only (wiring + control logic).
 ├── JsonProtocol.{h,cpp}        # protocol: JSON envelope (wraps ArduinoJson)
 ├── FirebaseSync.{h,cpp}        # cloud:    Firebase RTDB set/update + realtime stream (wraps FirebaseClient) [gateway only]
 ├── WeatherApi.{h,cpp}          # cloud:    WeatherAPI.com current weather (key from the app) [gateway only]
+├── SettingsStore.{h,cpp}       # storage:  NVS-backed last-known config (wraps Preferences) [gateway only]
 └── ClimateControl.{h,cpp}      # control:  dew point + pump decision [gateway only]
 ```
 
@@ -52,6 +53,7 @@ Each board only includes the modules it needs:
 | `JsonProtocol`       | Yes               | Yes      | Yes          |
 | `FirebaseSync`       | Yes               | —        | —            |
 | `WeatherApi`         | Yes               | —        | —            |
+| `SettingsStore`      | Yes               | —        | —            |
 | `ClimateControl`     | Yes               | —        | —            |
 
 ## Why modules are duplicated across folders
@@ -81,13 +83,20 @@ built into the Arduino ESP32 core. The gateway fetches outdoor weather
 from WeatherAPI.com itself; the API key is **managed by the Flutter app**
 and delivered at runtime via `radiant/config/weather_key` — it is never
 compiled into the firmware (see `docs/api.md §4`). Failed or stale fetches
-(`WEATHER_STALE_S`, default 1 h) disable weather demand and fall back to
-the indoor dew point.
+(`WEATHER_STALE_S`, default 1 h) switch control to the indoor dew point. When
+Wi-Fi is down the weather feed is dropped immediately and no fetch is
+attempted; the next successful reconnect refreshes it straight away.
 
 WiFi credentials are **not** stored in code — they are entered once through
 the WiFiManager captive portal (AP `RadiantCooling-AP`). Hold the gateway's
 reset button (GPIO 25, see `PINS_CONFIG.h`) for ~3 s to erase them and
-re-provision.
+re-provision; pumps are commanded off before the board restarts.
+
+With saved credentials `WifiProvisioner::begin()` returns immediately: the
+association runs in the background and a failure **never** reboots the
+gateway. While offline it retries the saved network once a minute (pinned to
+`ESP_NOW_CHANNEL` for the first three attempts, then a normal scan) and keeps
+the ESP-NOW radio on the peers' channel.
 
 Firebase is **two-way** on the gateway (Mobizt `FirebaseClient`, async):
 `setJson()`/`updateJson()` write telemetry/state to `radiant/telemetry/*`,
@@ -108,32 +117,50 @@ email/password (not anonymous) when those rules are used.
 - **ESP-NOW channel and power save:** every board calls `WiFi.setSleep(false)`
   - a sleeping receiver misses the MAC-layer ACK window, so the data still
   arrives while every send logs `tx FAIL`. Peers never join an AP, so they pin
-  their radio with `ESP_NOW_CHANNEL` in `Config.h`; the gateway always follows
-  the router. All boards must share one channel: the gateway prints
-  `CHANNEL MISMATCH` at boot when they do not, and both ends print their
-  channel (`wifi` on the gateway, `status` on the peers).
+  their radio with `ESP_NOW_CHANNEL` in `Config.h`. The gateway follows the
+  router while associated and re-pins itself to `ESP_NOW_CHANNEL` whenever the
+  link is lost, so the mesh keeps working offline. All boards must share one
+  channel: the gateway prints `CHANNEL MISMATCH` on connect when they do not,
+  and both ends print their channel (`wifi` on the gateway, `status` on the
+  peers). If the router is not on that channel, sensor telemetry cannot reach
+  the gateway, so control fails safe with the pumps off.
 - **Gateway tasking**: Firebase and the WeatherAPI HTTPS fetch run on a
   dedicated 20 KB `cloudTask`, never on `loop()`. The Arduino `loopTask`
   stack is only 8 KB and a TLS handshake overflowed it (`Stack canary
   watchpoint triggered (loopTask)`), so `loop()` now only enqueues
   `path + json` pairs on a FreeRTOS queue: the cloud task drains them
   (latest write per path wins, so a burst of ESP-NOW telemetry costs one
-  connection open per path) and reloads its own weather inputs. Keep new
-  `Firebase.*` / `HTTPClient` calls on the cloud task - in `loop()` they
-  will panic again.
-- **Weather**: the gateway picks the WeatherAPI key up from Firebase (config
-  stream, plus a REST re-read while it has none, hourly afterwards, and
-  straight after a failed fetch), fetches `current.json` every
-  `WEATHER_POLL_S`, and publishes the reading to
+  connection open per path). Keep new `Firebase.*` / `HTTPClient` calls on the
+  cloud task - in `loop()` they will panic again.
+- **Offline-first:** losing Wi-Fi, the internet or Firebase never stops the
+  control loop and never restarts the board. With no usable weather feed the
+  decision switches to **sensor-only**: indoor DHT22 temperature above the
+  comfort setpoint drives demand, the condensation floor uses the indoor dew
+  point, and the pumps are held **off** if no dew point (or no pipe/tank
+  temperature) is available. Cloud writes and WeatherAPI calls are suspended
+  while offline; on reconnect Firebase is re-initialised, weather is fetched
+  immediately, and the normal weather+sensors path resumes automatically.
+  Comfort setpoint, dew-point margin, weather threshold and DH setpoints are
+  cached in NVS (`SettingsStore`) so an offline power cycle keeps the tuned
+  values; the gateway always boots in auto mode.
+- **Weather**: while Wi-Fi is up the gateway picks the WeatherAPI key up from
+  Firebase (config stream, plus a REST re-read while it has none, hourly
+  afterwards, and straight after a failed fetch), fetches `current.json`
+  every `WEATHER_POLL_S`, and publishes the reading to
   `radiant/telemetry/weather/latest` as well as into its own telemetry.
+  Sensor-only control starts immediately on Wi-Fi loss.
 - **Gateway** reads the 4 ceiling pipe temperatures (4x DS18B20, one 1-Wire
   bus each: sensors 1-2 feed the supply/return telemetry), caches
   the latest peer readings for the chiller computation, forwards peer
   `telemetry`/`state` to Firebase, publishes its own telemetry + a retained
   heartbeat (`radiant/heartbeat/monitor`, includes the Wi-Fi channel), sends
-  `set_pumps` on decision changes, and applies or forwards `radiant/config`
-  stream changes. Cooling demand comes from the dehumidifier's DHT22 indoor
-  temperature; the anti-condensation floor protects the coldest pipe/tank.
+  `set_pumps` on decision changes, **re-sends the current command every**
+  `PUMP_CMD_RESEND_S` (60 s) to survive a lost frame or chiller reboot, and
+  applies or forwards `radiant/config` stream changes. After a gateway reboot
+  it adopts the chiller's reported output state and re-sends the cached DH
+  config, so the two ends resynchronise without the cloud. Cooling demand
+  comes from the dehumidifier's DHT22 indoor temperature; the
+  anti-condensation floor protects the coldest pipe/tank.
 - **Chiller** executes `set_pumps` (`on`/`off`), reports a `state` message
   on pump changes, and streams `water_temp_c` telemetry every
   `TELEMETRY_S`.
@@ -154,7 +181,7 @@ command chain, polled at the top of `loop()`. Open the Serial Monitor at
 | ------- | ----- | ----------------- |
 | `temps`, `temp <0-3>` | monitor | the 4 ceiling DS18B20 sensors, one bus each (GPIO 23 / 21 / 18 / 5; DISCONNECTED / 85 °C / out-of-range diagnostics) |
 | `button`, `button test` | monitor | WiFi reset button (GPIO 25): one-shot read, or a 10 s press/release edge watch |
-| `wifi` | monitor | WiFi link (SSID / IP / RSSI / MAC) |
+| `wifi` | monitor | WiFi link (SSID / IP / RSSI / MAC) plus Firebase/weather state and both radio channels |
 | `wx` | monitor | WeatherAPI fetch on demand (updates the cached outdoor inputs) |
 | `mode manual\|auto` | monitor | suspend/resume auto pump control |
 | `pumps on\|off` | monitor | ESP-NOW TX to the chiller (`set_pumps`) |
@@ -186,7 +213,8 @@ Host-machine tests for the pure-math modules live in
 [`src/esp/tests/`](tests/README.md) (stub `Arduino.h`, no Arduino toolchain
 needed). Currently covered: `ClimateControl` — Magnus dew point + the pump
 decision logic (weather/sensor demands, condensation protection,
-hysteresis, reference dew point selection).
+hysteresis, reference dew point selection, and the offline sensor-only /
+fail-safe branches).
 
 ```bash
 cd src/esp/tests

@@ -11,21 +11,22 @@ The three boards are split into two roles: the **gateway** (`RadiantCoolingMonit
 
 ```mermaid
 flowchart TD
-    A["Start"] --> B["Init sensors, ESP-NOW peers, Wi-Fi + Firebase"]
+    A["Boot: load NVS settings, init sensors + ESP-NOW (pinned channel)"] --> B["Start Wi-Fi in the background<br/>(never blocks with saved credentials)"]
     B --> C["Read local DS18B20 sensors"]
-    C --> D["Drain ESP-NOW queue (peer telemetry)"]
-    D --> E["Fetch weather (throttled: WEATHER_POLL_S)"]
-    E --> F["Compute pump decision - weather + sensors + dew point"]
-    F --> G{"Decision changed?"}
-    G -->|Yes| H["Send set_pumps cmd to chiller over ESP-NOW"]
-    G -->|No| I["Write telemetry + control values to Firebase"]
-    H --> I
-    I --> J["Stream: process radiant/config changes (realtime)"]
-    J --> K{"Config changed?"}
-    K -->|Yes| L["Apply locally or forward cmd/config to peer"]
-    K -->|No| M["Reconnect Wi-Fi/Firebase if dropped"]
-    L --> M
-    M --> N["Publish heartbeat"]
+    C --> D["Drain ESP-NOW queue (peer telemetry/state)"]
+    D --> E{"Wi-Fi up AND weather fresh?"}
+    E -->|Yes| F["Use outdoor weather<br/>(poll every WEATHER_POLL_S)"]
+    E -->|No| G["Sensor-only: drop outdoor inputs,<br/>re-pin radio to ESP_NOW_CHANNEL"]
+    F --> H["Compute dew point floor + pump decision"]
+    G --> H
+    H --> I{"Decision changed OR<br/>60 s resend due?"}
+    I -->|Yes| J["Send set_pumps to chiller"]
+    I -->|No| K{"Firebase ready?"}
+    J --> K
+    K -->|Yes| L["Write telemetry/heartbeat +<br/>process radiant/config stream"]
+    K -->|No| M["Skip cloud writes - keep controlling locally"]
+    L --> N["Offline: retry Wi-Fi every 60 s;<br/>Firebase backoff 60 s to 5 min"]
+    M --> N
     N --> C
 ```
 
@@ -47,32 +48,40 @@ flowchart TD
 ## 2. Water Pump Control Logic (computed on the gateway)
 
 The pump decision is **not** made on the chiller board — the gateway
-(`RadiantCoolingMonitor`) computes it from the WeatherAPI outdoor weather
-(API key managed by the app) and all ESP sensor readings, then sends a
-`set_pumps` command to the chiller. The chiller board only executes
-commands (with a local fail-safe: pumps off if its water sensor is lost).
+(`RadiantCoolingMonitor`) computes it from the available weather and all ESP
+sensor readings, then sends a `set_pumps` command to the chiller. Weather is
+optional: with no Wi-Fi/internet the gateway runs the same algorithm in
+**sensor-only** mode. The chiller board only executes commands (with a local
+fail-safe: pumps off if its water sensor is lost).
 
 ```mermaid
 flowchart TD
-    A["Inputs: outdoor dew point + temp (WeatherAPI), DHT22 temp + humidity, supply/return + pipe temps (DS18B20), chiller tank temp"]
+    A["Inputs: outdoor dew point + temp<br/>(only if weatherValid), DHT22 temp + humidity,<br/>supply/return + pipe temps, chiller tank temp"]
     A --> B["Indoor dew point = Magnus(DHT22 temp, humidity)"]
-    B --> C["Ref dew point = max(outdoor, indoor)"]
-    C --> D["Water floor = ref dew point + margin"]
-    D --> E{"Weather demand?<br/>(outdoor temp &gt; weather_cool_temp)"}
-    E -->|Yes| F{"Sensor demand?<br/>(indoor DHT22 temp &gt; comfort setpoint)"}
-    E -->|No| G["Pumps OFF"]
-    F -->|Yes| H{"Coldest pipe/tank above floor?"}
-    F -->|No| G
-    H -->|Yes| I["Pumps ON"]
-    H -->|No| G
-    G --> J["Send set_pumps cmd to chiller (on change only)"]
-    I --> J
+    B --> C{"Weather valid?"}
+    C -->|Yes| D["Ref dew point = max(outdoor, indoor)"]
+    C -->|No| E["Ref dew point = indoor only"]
+    D --> F["Water floor = ref dew point + margin"]
+    E --> F
+    F --> G{"Sensor demand?<br/>(indoor temp &gt; comfort setpoint)"}
+    G -->|No| OFF["Pumps OFF"]
+    G -->|Yes| H{"Dew point known?"}
+    H -->|No| OFF
+    H -->|Yes| I{"Weather demand?<br/>(outdoor temp &gt; weather_cool_temp;<br/>true when offline)"}
+    I -->|No| OFF
+    I -->|Yes| J{"Coldest pipe/tank above floor<br/>(+ hysteresis when starting)?"}
+    J -->|No| OFF
+    J -->|Yes| ON["Pumps ON"]
+    ON --> K["Send set_pumps on change,<br/>then re-send every 60 s"]
+    OFF --> K
 ```
 
-> Draft thresholds (tunable via `config/control` in Firebase): comfort
-> setpoint 24 °C, dew-point margin 2 °C, weather demand above 28 °C,
-> hysteresis 1 °C. Hysteresis is applied by comparing against the floor
-> ± margin depending on whether the pumps are already running.
+> Thresholds (tunable via `config/control` in Firebase): comfort setpoint
+> 24 °C, dew-point margin 2 °C, weather demand above 28 °C, hysteresis 1 °C.
+> They are cached in NVS so an offline reboot keeps them. Hysteresis is
+> applied by comparing against the floor ± margin depending on whether the
+> pumps are already running. With no valid dew point (or no valid pipe/tank
+> temperature) the decision is **OFF** (fail-safe).
 
 ## 3. Dehumidifier Control Logic
 
@@ -98,5 +107,10 @@ flowchart TD
 
 - Hysteresis (deadbands) is applied to all switching logic to prevent SSR
   chatter and short-cycling of the pumps/dehumidifier.
-- Fail-safe behaviour (e.g. pump override on sensor failure) is handled
-  outside these flows and should be documented per-controller.
+- **Offline:** no WeatherAPI and no Firebase traffic. Pump control uses only
+  the sensors; if the dew point is unavailable the pumps are held off. Peer
+  telemetry still arrives over ESP-NOW, so the display/state stays live on
+  the local gateway.
+- **Fail-safe behaviour:** per-controller local guards sit below these flows
+  (chiller: water-sensor loss → pumps off; dehumidifier: 3 failed DHT22
+  reads → output off; gateway: unknown dew point/cold point → pumps off).

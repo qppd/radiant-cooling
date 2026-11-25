@@ -13,4 +13,4 @@ static const uint8_t TELEMETRY_S = 30;
 // without this it idles on channel 1 while the gateway follows the router -
 // different channels mean no ACK and every send reports FAIL. Set it to the
 // channel the gateway is connected to (the gateway prints it in `wifi`).
-static const uint8_t ESP_NOW_CHANNEL = 1;
+static const uint8_t ESP_NOW_CHANNEL = 6;

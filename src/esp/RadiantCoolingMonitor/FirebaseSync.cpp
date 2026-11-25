@@ -41,9 +41,14 @@ void FirebaseSync::printNetworkDiagnostics() {
 }
 
 void FirebaseSync::begin() {
-    printNetworkDiagnostics();
-
-    Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
+    // Only print the full (DNS-blocking) diagnostics once; begin() is retried
+    // by the cloud task on every backoff step while the internet is down.
+    static bool printedDiagnostics = false;
+    if (!printedDiagnostics) {
+        printedDiagnostics = true;
+        printNetworkDiagnostics();
+        Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
+    }
 
     // Assign Firebase credentials
     config.api_key = API_KEY;
@@ -68,44 +73,26 @@ void FirebaseSync::begin() {
     config.timeout.rtdbStreamReconnect = 1 * 1000;
     config.timeout.rtdbStreamError = 3 * 1000;
 
-    // Begin Firebase with retry logic
+    // One attempt per call. The gateway's cloud task owns the retry/backoff
+    // policy, so a long internal retry loop here would keep the TLS stack busy
+    // continuously while the internet is down.
     Serial.println("Initializing Firebase...");
+    Firebase.begin(&config, &auth);
 
-    int retryCount = 0;
-    const int maxRetries = 5;
-    const int baseDelay = 2000;
-
-    while (retryCount < maxRetries) {
-        Firebase.begin(&config, &auth);
-
-        int initWait = 0;
-        const int maxInitWait = 30;
-
-        while (!Firebase.ready() && initWait < maxInitWait) {
-            delay(1000);
-            initWait++;
-            Serial.print(".");
-        }
-
-        if (Firebase.ready()) {
-            Serial.println("\nFirebase initialized successfully!");
-            break;
-        } else {
-            retryCount++;
-            Serial.printf("\nFirebase initialization failed (attempt %d/%d)\n", retryCount, maxRetries);
-
-            if (retryCount < maxRetries) {
-                int delayTime = baseDelay * (1 << (retryCount - 1));
-                Serial.printf("Retrying in %d seconds...\n", delayTime / 1000);
-                delay(delayTime);
-            }
-        }
+    int initWait = 0;
+    const int maxInitWait = 15;
+    while (!Firebase.ready() && initWait < maxInitWait) {
+        delay(1000);
+        initWait++;
+        Serial.print(".");
     }
 
     if (!Firebase.ready()) {
-        Serial.println("Failed to initialize Firebase after all retries!");
+        Serial.println("\nFirebase not ready - cloud task will retry with backoff");
         return;
     }
+
+    Serial.println("\nFirebase initialized successfully!");
 
     // Initialize streams for real-time monitoring
     initializeStreams();
@@ -157,6 +144,11 @@ void FirebaseSync::initializeControlStream() {
 }
 
 void FirebaseSync::handleStreams() {
+    // While offline/Firebase-not-ready, don't keep attempting subscriptions
+    // every few seconds; cloudTask calls begin() again with backoff. This is
+    // what kept the gateway spamming TLS attempts with no internet.
+    if (!isReady()) return;
+
     // Re-subscribe dead streams. The timeout callback only clears the active
     // flag, so without this a single network blip stopped config updates -
     // including the WeatherAPI key delivery - until the next reboot.

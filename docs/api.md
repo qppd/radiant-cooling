@@ -40,6 +40,9 @@
 - **Cloud → plant:** the app writes commands/config to Firebase; the gateway
   streams those paths (real time) and forwards changes to the right board
   via ESP-NOW.
+- **Cloud is optional:** the ESP-NOW mesh and the gateway's pump control run
+  with no router or internet. Weather + Firebase are a *bonus* path; see
+  §4 (weather) and §6/§7 (control and failure behaviour).
 
 ## 2. Device IDs
 
@@ -100,9 +103,14 @@ supply/return):
 { "temps_c": [16.2, 16.8, 17.1, 22.4],
   "supply_c": 16.2, "return_c": 16.8, "coldest_pipe_c": 16.2,
   "delta_t_c": 0.6, "outdoor_temp_c": 31.2, "outdoor_dewpoint_c": 24.5,
-  "outdoor_humidity_pct": 66.0, "dew_point_c": 18.0,
+  "outdoor_humidity_pct": 66.0, "weather_valid": true,
+  "control_source": "weather+sensors", "dew_point_c": 18.0,
   "water_floor_c": 20.0, "pumps": "on", "ts": 1786119829 }
 ```
+
+> With no usable weather the `outdoor_*` fields are the `-100` invalid
+> sentinel, `weather_valid` is `false`, and `control_source` is
+> `sensors_only` (or `failsafe` when the dew point is unknown).
 
 `chiller` (two DS18B20 tank sensors + compressor and pump states;
 `water_temp_c` = coldest valid of outgoing/ingoing):
@@ -151,7 +159,8 @@ app does not have to wait for the 30 s monitor cycle):
 | ----------------------- | --------- | ------ | --------------------------------------------- |
 | `comfort_setpoint_c`    | `control` | float  | Indoor air (DHT22) above this → cooling demand (°C) |
 | `dewpoint_margin_c`     | `control` | float  | Water floor = dew point + margin (°C)         |
-| `weather_cool_temp_c`   | `control` | float  | Outdoor temp above this → weather demand (°C) || `humidity_setpoint_pct` | `dh`      | float  | Dehumidifier target RH (%) — **55**          |
+| `weather_cool_temp_c`   | `control` | float  | Outdoor temp above this → weather demand (°C); ignored offline |
+| `humidity_setpoint_pct` | `dh`      | float  | Dehumidifier target RH (%) — **55**            |
 | `humidity_deadband_pct` | `dh`      | float  | RH hysteresis (%)                              |
 | `weather_key` (node)    | `weather_key` | string | WeatherAPI key delivered to the gateway — see §4 |
 
@@ -178,12 +187,19 @@ firmware.
   was offline still reaches it.
 - **Throttle:** the gateway polls every `WEATHER_POLL_S` (default 900 s =
   15 min) to stay inside the free-tier daily call budget.
-- **Failure handling:** on a failed fetch (bad/absent key, API unreachable)
-  the last good values are kept; once older than `WEATHER_STALE_S` (default
-  3600 s = 1 h) weather demand turns off and the condensation floor falls
-  back to the **indoor** dew point only.
+- **Wi-Fi loss:** the weather snapshot is dropped immediately (no fetch is
+  attempted) and the gateway switches to **sensor-only** control. On
+  reconnect it fetches weather as soon as the link is up.
+- **Failure handling (Wi-Fi up, API failing):** the last good values are kept
+  for up to `WEATHER_STALE_S` (default 3600 s = 1 h); after that they are
+  discarded and control uses the **indoor** dew point only. `outdoor_*`
+  telemetry fields are the `-100` invalid sentinel while there is no usable
+  reading.
 - The app stores the key in `lib/config/app_config.dart` (git-ignored —
   copy from `app_config.example.dart`) or enters it in the app.
+- No Firebase access happens while offline: the config stream/telemetry writes
+  are skipped, and the cloud task reconnects Firebase with backoff (1 min →
+  5 min) once Wi-Fi returns.
 
 ## 5. ESP-NOW protocol
 
@@ -219,7 +235,7 @@ firmware.
 | `telemetry` | peer → gateway           | `{ "water_temp_c": 16.2, "pump1": "on", ... }`      |
 | `state`     | peer → gateway           | `{ "compressor": "on", "pump1": "on" }`            |
 | `cmd`       | gateway → peer           | `{ "cmd": "set_pumps", "value": "on" }`            |
-| `config`    | gateway → peer           | `{ "comfort_setpoint_c": 24.0, "dewpoint_margin_c": 2.0 }` |
+| `config`    | gateway → peer           | `{ "humidity_setpoint_pct": 55.0, "humidity_deadband_pct": 5.0 }` |
 | `status`    | both                     | `{ "online": true, "firmware": "0.1.0" }`            |
 
 ### 5.3 Supported commands (`cmd`)
@@ -241,18 +257,30 @@ firmware.
    library (async, non-blocking).
 
 ### Chiller control (computed on the gateway)
-1. The gateway polls WeatherAPI.com (key delivered by the app via
+1. **Online:** the gateway polls WeatherAPI.com (key delivered by the app via
    `radiant/config/weather_key`) and combines the outdoor dew point, the
    indoor DHT22 temperature + humidity, the 4x ceiling pipe temperatures
    (DS18B20) and the chiller tank water temperature (coldest of the
    outgoing/ingoing sensors).
 2. Reference dew point = **higher of outdoor/indoor**; water floor = dew
    point + `dewpoint_margin_c` (anti-condensation).
-3. Pumps run when **weather demand** AND **sensor demand** (indoor DHT22
-   temperature above setpoint) AND the **coldest** pipe/tank temperature
-   is safely above the floor (see `docs/diagrams/flow-chart.md`).
-4. On a decision change, the gateway sends the `set_pumps` command to the
-   chiller over ESP-NOW.### Commands (app → plant)
+3. **Offline (sensor-only):** there is no outdoor reading, so weather demand
+   is treated as satisfied. Demand comes from the indoor DHT22 temperature
+   above `comfort_setpoint_c`, and the reference dew point is the **indoor**
+   dew point only. With no valid indoor humidity (or no valid pipe/tank
+   temperature) the pumps are held **off**.
+4. Pumps run when demand is present AND the **coldest** pipe/tank
+   temperature is safely above the water floor (hysteresis applies;
+   see `docs/diagrams/flow-chart.md`).
+5. On a decision change the gateway sends `set_pumps` to the chiller over
+   ESP-NOW, then **re-sends the current command every 60 s**
+   (`PUMP_CMD_RESEND_S`) so a lost frame or a peer reboot self-heals. After a
+   gateway reboot the pump state is adopted from the chiller's telemetry and
+   the cached DH config is re-sent.
+6. Control thresholds/DH setpoints are cached in NVS and survive an offline
+   power cycle; the gateway always boots in **auto** mode.
+
+### Commands (app → plant)
 0. **Linking:** on first login (new account, or any signed-in user with no
    linked system) the app shows a dedicated linking page asking for the
    system ID; it validates it against the device registry
@@ -281,6 +309,17 @@ firmware.
   status can be inferred from the freshness of `telemetry/<peer>/latest`.
   The app currently surfaces the gateway heartbeat; peer data appears on
   the dashboard as soon as a peer reports.
+- **Offline operation:** the gateway boots and controls with **no Wi-Fi at
+  all** (or Wi-Fi without internet). Saved-network reconnects run every
+  60 s in the background; the board never restarts on a network failure. The
+  radio is pinned to `ESP_NOW_CHANNEL` while the AP is unreachable. On
+  reconnect the mesh is already running, Firebase re-initialises with
+  60 s → 5 min backoff, and telemetry/config resumes.
+- **State resync without the cloud:** the gateway re-sends the cached DH
+  config when the DH peer reports `status`, adopts the chiller's reported
+  pump state after a gateway reboot, and periodically re-sends `set_pumps`.
+- **Command idempotence:** `set_pumps` is idempotent, so the 60 s resend is
+  safe; duplicate `config`/`cmd` frames are harmless.
 - **Unknown commands** are ignored and logged on the peer.
 
 ## 8. Firebase security rules & auth

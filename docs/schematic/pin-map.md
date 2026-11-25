@@ -61,16 +61,17 @@ pull-up; GPIO25 is ADC2 but only used as a digital input).
   from a 3.3V GPIO (3-32V DC input). Confirm the module's input spec; if it
   needs more drive, buffer with a transistor/MOSFET.
 - **WiFi reset button:** a momentary push button wired from GPIO 25 to GND
-  (the internal pull-up is enabled in code). Hold for ~3 s to erase the
-  saved WiFi credentials (WiFiManager) and restart — a captive portal then
-  opens for new SSID/password. Holding it at power-up also erases the
-  credentials (the portal opens without a restart).
+  (the internal pull-up is enabled in code). Hold for ~3 s to command the
+  pumps **off**, erase the saved WiFi credentials (WiFiManager) and restart
+  — a captive portal then opens for new SSID/password. Holding it at
+  power-up also erases the credentials (the portal opens without a restart).
 - **ESP-NOW needs no pins** — it uses the radio. All boards run in STA mode.
-- **Channel lock with WiFiManager:** the gateway connects to the router's
-  channel automatically, so its ESP-NOW channel is whatever the router uses.
-  The peers (STA mode, not associated) default to channel 1 and will not
-  hear the gateway unless they match — **fix the router to channel 1, 6, or
-  11** and/or configure the peers' channel to match the gateway.
+- **Channel lock with WiFiManager:** while associated the gateway follows the
+  router's channel; when the AP is missing it re-pins its radio to
+  `ESP_NOW_CHANNEL` (default 6, `Config.h`), matching the peers that pin the
+  same channel. **Fix the router to that channel** or every ESP-NOW send
+  fails (the gateway prints a `CHANNEL MISMATCH` warning and control fails
+  safe with the pumps off).
 
 ## Power
 

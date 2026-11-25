@@ -103,6 +103,8 @@ flowchart LR
 ## Notes
 
 - Only the gateway board uses Wi-Fi; peers are Wi-Fi-free (lower power,
-  simpler setup).
+  simpler setup). The gateway keeps controlling the plant locally when the
+  router/internet is missing.
 - All boards must operate on the same Wi-Fi channel for ESP-NOW (see
-  `docs/api.md`).
+  `docs/api.md`). The peers pin `ESP_NOW_CHANNEL`; the gateway follows the
+  router when associated and re-pins to that channel while offline.

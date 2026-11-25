@@ -6,7 +6,7 @@ Host-machine tests for the pure-math modules of the ESP32 firmware.
 
 | File                     | Module                                        | Covers                                             |
 | ------------------------ | --------------------------------------------- | -------------------------------------------------- |
-| `test_climate_control.cpp` | `ClimateControl` (gateway)                   | Magnus dew point + pump decision logic (DHT22 demand, coldest-pipe/tank condensation floor, hysteresis, fail-safe, reference selection) |
+| `test_climate_control.cpp` | `ClimateControl` (gateway)                   | Magnus dew point + pump decision logic (DHT22 demand, coldest-pipe/tank condensation floor, hysteresis, fail-safe, reference selection, offline sensor-only mode) |
 
 The `ClimateControl` module has no Arduino hardware dependencies, so it is
 compiled against the stub `Arduino.h` in this folder and run as a normal

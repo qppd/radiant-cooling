@@ -9,7 +9,11 @@ typedef void (*EspNowSendCb)(const uint8_t* mac, bool success);
 
 class EspNowTransport {
 public:
-  bool begin();
+  // offlineChannel is applied only when the station is not associated yet, so
+  // an unprovisioned/offline gateway still reaches the pinned peers.
+  bool begin(uint8_t offlineChannel = 0);
+  bool setChannel(uint8_t channel);
+  uint8_t channel();
   bool addPeer(const uint8_t* mac, uint8_t channel = 0);
   bool sendTo(const uint8_t* mac, const uint8_t* data, size_t len);
   void onReceive(EspNowReceiveCb cb);

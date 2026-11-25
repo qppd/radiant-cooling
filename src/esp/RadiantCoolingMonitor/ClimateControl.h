@@ -5,8 +5,12 @@ static const float kTempValidLoC = -90.0f;
 static const float kTempValidHiC =  60.0f;
 
 struct ControlInputs {
-  float outdoorTempC     = 0.0f;
-  float outdoorDewPointC = 0.0f;
+  // Outdoor values are only usable while weatherValid is true. They default to
+  // the "invalid" sentinel so a missing weather feed can never masquerade as
+  // a comfortable 0 C outdoor reading.
+  bool  weatherValid     = false;
+  float outdoorTempC     = -100.0f;
+  float outdoorDewPointC = -100.0f;
   float indoorTempC      = 0.0f;
   float indoorHumidityPct = 0.0f;
   float supplyTempC      = 0.0f;
@@ -23,11 +27,15 @@ struct ControlParams {
 };
 
 struct ControlDecision {
-  bool  pumpsOn;
-  float refDewPointC;
-  float waterFloorC;
-  bool  weatherDemand;
-  bool  sensorDemand;
+  bool  pumpsOn = false;
+  float refDewPointC = -100.0f;
+  float waterFloorC = -100.0f;
+  bool  weatherDemand = false;
+  bool  sensorDemand = false;
+  // Diagnostics for telemetry / serial status.
+  bool  sensorOnly = false;       // weather feed unusable -> indoor sensors drive demand
+  bool  dewPointKnown = false;    // at least one valid dew point reference
+  bool  coldPointKnown = false;   // at least one valid pipe/tank temperature
 };
 
 class ClimateControl {

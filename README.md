@@ -57,17 +57,27 @@ installation. Three ESP32 boards form a wireless mesh:
 No MQTT broker, no cloud middleware — the boards use **ESP-NOW** directly,
 and the gateway is the only device with Wi-Fi.
 
+Cloud connectivity is optional. If the router, internet, Firebase or
+WeatherAPI is unavailable, the gateway keeps controlling the plant **locally
+from its sensors** and automatically returns to the weather+cloud path when
+the link comes back.
+
 ## Features
 
-|- **ESP-NOW mesh** — peer-to-peer, no router or broker required between boards
+- **ESP-NOW mesh** — peer-to-peer, no router or broker required between boards
 |- **Two-way Firebase** — realtime *streaming* of config + control changes from the app,
   plus telemetry/state writes (Mobizt `Firebase_ESP_Client`, multi-path stream callbacks)
 - **Weather-aware pump control** — combines WeatherAPI.com dew point,
   indoor humidity, water/pipe temperatures and indoor air (DHT22);
   anti-condensation protection on the coldest pipe
+- **Offline-first control** — with no Wi-Fi, or Wi-Fi without internet, the
+  gateway runs **sensor-only**: weather demand is replaced by indoor demand,
+  the floor uses the indoor dew point, pump commands are held/retried, and
+  Firebase + WeatherAPI work is suspended until the link returns
 - **Dehumidifier** — holds indoor RH at 55% with hysteresis
-- **WiFiManager provisioning** — captive portal on first boot; hold the
-  reset button 3 s to re-provision
+- **WiFiManager provisioning** — captive portal only when no credentials are
+  saved (or the reset button is held 3 s); offline reconnects run in the
+  background and never restart the board
 - **Flutter Android app** — login/signup, live dashboard and settings
 - **Modular firmware** — every component and library encapsulated in its own
   class (sensor, SSR, ESP-NOW, JSON, Firebase, Weather, Climate)

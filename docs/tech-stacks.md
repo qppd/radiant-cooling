@@ -15,8 +15,9 @@
 | Build      | Arduino IDE                                       | One sketch per controller; ESP32 core via Board Manager |
 | Framework  | Arduino (`esp32` core)                            | Decided: Arduino IDE + Arduino framework           |
 | Mesh       | **ESP-NOW** (built into the ESP32 core)           | Board-to-board comms, no router/broker required    |
-| WiFi       | **WiFiManager** (tzapu) — gateway only            | Branded captive portal (static AP IP), auto-reconnect; no hardcoded SSID/password |
-| Cloud      | **FirebaseClient** (Mobizt) — gateway only        | Async Firebase Realtime Database REST client; the older Firebase-ESP-Client is deprecated |
+| WiFi       | **WiFiManager** (tzapu) — gateway only            | Branded captive portal (static AP IP) only when unprovisioned; saved-network retries run in the background and never reboot the board |
+| Cloud      | **FirebaseClient** (Mobizt) — gateway only        | Async Firebase Realtime Database REST client; the older Firebase-ESP-Client is deprecated. Cloud is optional — control runs offline |
+| Storage    | **Preferences** (NVS, ESP32 core) — gateway only  | Caches the last control/DH settings so an offline power cycle keeps them |
 | Encoding   | ArduinoJson                                       | Compact JSON payloads (≤ 250 B) over ESP-NOW    |
 | Sensors     | OneWire / DallasTemperature, DHT                  | Install via Arduino Library Manager              |
 | Code layout | One class module per component + per library      | See [`src/esp/README.md`](../src/esp/README.md)  |
@@ -34,11 +35,11 @@
 
 | Layer           | Choice                              | Notes                                 |
 | --------------- | ----------------------------------- | ------------------------------------- |
-| Board-to-board  | ESP-NOW                             | 250 B max payload; protocol in [`api.md`](api.md) |
-| Board-to-cloud  | HTTPS REST to Firebase RTDB         | Gateway board only                    |
+| Board-to-board  | ESP-NOW                             | 250 B max payload; protocol in [`api.md`](api.md); works with no router |
+| Board-to-cloud  | HTTPS REST to Firebase RTDB         | Gateway board only; suspended entirely while offline |
 | Cloud database  | Firebase Realtime Database          | JSON tree; path scheme in `api.md`    |
-| Weather data    | WeatherAPI.com (free tier)          | Gateway fetches it; the app delivers the API key via `config/weather_key` |
-| Provisioning    | WiFiManager captive portal (gateway)| Branded portal (AP `RadiantCooling-AP`, 192.168.4.1); enter SSID/password once; reset button (GPIO 25) to re-provision |
+| Weather data    | WeatherAPI.com (free tier)          | Gateway fetches it while online; the app delivers the API key via `config/weather_key`. Offline control uses sensors only |
+| Provisioning    | WiFiManager captive portal (gateway)| Branded portal (AP `RadiantCooling-AP`, 192.168.4.1) only when no credentials are saved; enter SSID/password once; reset button (GPIO 25) to re-provision (pumps are stopped first) |
 
 ## Documentation
 

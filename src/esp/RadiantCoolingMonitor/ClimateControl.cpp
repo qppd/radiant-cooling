@@ -20,30 +20,71 @@ float ClimateControl::dewPointC(float tempC, float humidityPct) {
   return (b * alpha) / (a - alpha);
 }
 
+static bool validTemp(float t) {
+  return t > kTempValidLoC && t < kTempValidHiC;
+}
+
+static bool validHumidity(float h) {
+  return h > 0.0f && h <= 100.0f && !isnan(h);
+}
+
 ControlDecision ClimateControl::decidePumps(const ControlInputs& in,
                                             const ControlParams& p,
                                             bool currentlyOn) {
   ControlDecision d;
 
-  d.refDewPointC = fmaxf(in.outdoorDewPointC,
-                         dewPointC(in.indoorTempC, in.indoorHumidityPct));
-  d.waterFloorC  = d.refDewPointC + p.dewPointMarginC;
+  // Build the reference dew point from whichever sources are actually valid.
+  // Outdoor values are ignored unless the weather feed is marked valid, so an
+  // offline gateway falls back to the indoor DHT22 dew point and never treats
+  // the -100 C sentinels (or the old 0 C defaults) as real readings.
+  const bool indoorTempOk     = validTemp(in.indoorTempC);
+  const bool indoorHumidityOk = validHumidity(in.indoorHumidityPct);
+  const bool outdoorDewOk     = in.weatherValid && validTemp(in.outdoorDewPointC);
 
-  d.weatherDemand = in.outdoorTempC > p.weatherCoolTempC;
-  d.sensorDemand  = in.indoorTempC > p.comfortSetpointC;
+  bool dewPointKnown = false;
+  float refDewPointC = -100.0f;
 
-  bool wantCooling = d.weatherDemand && d.sensorDemand;
+  if (outdoorDewOk) {
+    refDewPointC = in.outdoorDewPointC;
+    dewPointKnown = true;
+  }
+  if (indoorTempOk && indoorHumidityOk) {
+    float indoorDew = dewPointC(in.indoorTempC, in.indoorHumidityPct);
+    if (validTemp(indoorDew)) {
+      refDewPointC = dewPointKnown ? fmaxf(refDewPointC, indoorDew) : indoorDew;
+      dewPointKnown = true;
+    }
+  }
+
+  d.dewPointKnown = dewPointKnown;
+  d.refDewPointC  = dewPointKnown ? refDewPointC : -100.0f;
+  d.waterFloorC   = dewPointKnown ? refDewPointC + p.dewPointMarginC : -100.0f;
+  d.sensorOnly    = !in.weatherValid;
+
+  d.sensorDemand = indoorTempOk && in.indoorTempC > p.comfortSetpointC;
+
+  // Online: outdoor temperature gates cooling. Offline: we have no outdoor
+  // reading, so indoor demand alone drives the pumps (sensor-only mode).
+  d.weatherDemand = in.weatherValid
+                        ? (validTemp(in.outdoorTempC) &&
+                           in.outdoorTempC > p.weatherCoolTempC)
+                        : true;
+
+  // No dew point reference -> we cannot prove the pipes are above the
+  // condensation floor, so fail safe with the pumps off.
+  bool wantCooling = d.sensorDemand && d.weatherDemand && d.dewPointKnown;
 
   float coldest = 1e9f;
   uint8_t valid = 0;
-  if (in.coldestPipeC > kTempValidLoC && in.coldestPipeC < kTempValidHiC) {
+  if (validTemp(in.coldestPipeC)) {
     coldest = fminf(coldest, in.coldestPipeC);
     ++valid;
   }
-  if (in.waterTempC > kTempValidLoC && in.waterTempC < kTempValidHiC) {
+  if (validTemp(in.waterTempC)) {
     coldest = fminf(coldest, in.waterTempC);
     ++valid;
   }
+  d.coldPointKnown = valid > 0;
 
   if (!wantCooling || valid == 0) {
     d.pumpsOn = false;

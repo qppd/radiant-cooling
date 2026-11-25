@@ -1,9 +1,10 @@
 #include "EspNowTransport.h"
+#include <esp_wifi.h>
 
 EspNowReceiveCb EspNowTransport::_recvHandler = nullptr;
 EspNowSendCb    EspNowTransport::_sendHandler = nullptr;
 
-bool EspNowTransport::begin() {
+bool EspNowTransport::begin(uint8_t offlineChannel) {
   WiFi.mode(WIFI_STA);
   // Keep the radio fully awake: with WiFi power-save on (default when
   // associated to an AP), the STA sleeps between DTIM beacons and misses the
@@ -13,7 +14,35 @@ bool EspNowTransport::begin() {
   if (esp_now_init() != ESP_OK) return false;
   esp_now_register_recv_cb(_recvCb);
   esp_now_register_send_cb(_sendCb);
+
+  // While the gateway has no AP it must sit on the same channel the peers
+  // pinned themselves to, otherwise every ESP-NOW send fails silently.
+  if (offlineChannel != 0 && WiFi.status() != WL_CONNECTED) {
+    if (!setChannel(offlineChannel)) {
+      Serial.printf("[espnow] could not pin offline channel %u\n",
+                    (unsigned)offlineChannel);
+    } else {
+      Serial.printf("[espnow] offline - radio pinned to channel %u\n",
+                    (unsigned)offlineChannel);
+    }
+  }
   return true;
+}
+
+bool EspNowTransport::setChannel(uint8_t channel) {
+  if (channel == 0) return false;
+  if (esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE) != ESP_OK) {
+    Serial.printf("[espnow] could not set channel %u\n", (unsigned)channel);
+    return false;
+  }
+  return true;
+}
+
+uint8_t EspNowTransport::channel() {
+  uint8_t primary = 0;
+  wifi_second_chan_t second = WIFI_SECOND_CHAN_NONE;
+  if (esp_wifi_get_channel(&primary, &second) != ESP_OK) return 0;
+  return primary;
 }
 
 bool EspNowTransport::addPeer(const uint8_t* mac, uint8_t channel) {

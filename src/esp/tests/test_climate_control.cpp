@@ -69,6 +69,7 @@ static void testColdestValidC() {
 
 static ControlInputs warmAndComfortableInputs() {
   ControlInputs in;
+  in.weatherValid      = true;
   in.outdoorTempC      = 32.0f;
   in.outdoorDewPointC  = 20.0f;
   in.indoorTempC       = 26.0f;
@@ -77,6 +78,15 @@ static ControlInputs warmAndComfortableInputs() {
   in.returnTempC       = 25.0f;
   in.coldestPipeC      = 24.0f;
   in.waterTempC        = 25.0f;
+  return in;
+}
+
+// Same plant, but the gateway has no outdoor weather (Wi-Fi/WeatherAPI gone).
+static ControlInputs offlineInputs() {
+  ControlInputs in = warmAndComfortableInputs();
+  in.weatherValid     = false;
+  in.outdoorTempC     = -100.0f;
+  in.outdoorDewPointC = -100.0f;
   return in;
 }
 
@@ -204,6 +214,78 @@ static void testPipesOnlyFloorCheck() {
   CHECK(d.pumpsOn == true);
 }
 
+// ── Offline / sensor-only mode ───────────────────────────────────────────
+
+static void testOfflineIndoorDemand() {
+  ControlDecision d =
+      ClimateControl::decidePumps(offlineInputs(), defaultParams(), false);
+
+  CHECK(d.sensorOnly == true);
+  CHECK(d.weatherDemand == true);   // weather cannot block cooling offline
+  CHECK(d.sensorDemand == true);
+  CHECK(d.dewPointKnown == true);
+  CHECK_CLOSE(d.refDewPointC, 16.3f, 0.2f);  // indoor dew point only
+  CHECK_CLOSE(d.waterFloorC, 18.3f, 0.2f);
+  CHECK(d.coldPointKnown == true);
+  CHECK(d.pumpsOn == true);
+}
+
+static void testOfflineIgnoresOutdoorValues() {
+  ControlInputs in = offlineInputs();
+  in.outdoorTempC     = 45.0f;   // stale/bogus values must be ignored
+  in.outdoorDewPointC = 40.0f;
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.sensorOnly == true);
+  CHECK_CLOSE(d.refDewPointC, 16.3f, 0.2f);
+  CHECK(d.pumpsOn == true);
+}
+
+static void testOfflineNoHumidityFailsSafe() {
+  ControlInputs in = offlineInputs();
+  in.indoorHumidityPct = 0.0f;   // no dew point reference at all
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.dewPointKnown == false);
+  CHECK(d.pumpsOn == false);
+}
+
+static void testOfflineCoolIndoor() {
+  ControlInputs in = offlineInputs();
+  in.indoorTempC = 22.0f;
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.sensorOnly == true);
+  CHECK(d.sensorDemand == false);
+  CHECK(d.pumpsOn == false);
+}
+
+static void testOfflineCondensationFloor() {
+  ControlInputs in = offlineInputs();
+  in.coldestPipeC = 17.0f;       // below indoor dew point (16.3) + 2 C margin
+  in.waterTempC   = 25.0f;
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), true);
+
+  CHECK(d.sensorOnly == true);
+  CHECK_CLOSE(d.waterFloorC, 18.3f, 0.2f);
+  CHECK(d.pumpsOn == false);
+}
+
+static void testOfflineNoColdPointFailsSafe() {
+  ControlInputs in = offlineInputs();
+  in.coldestPipeC = -100.0f;
+  in.waterTempC   = -127.0f;
+  ControlDecision d =
+      ClimateControl::decidePumps(in, defaultParams(), false);
+
+  CHECK(d.coldPointKnown == false);
+  CHECK(d.pumpsOn == false);
+}
+
 int main() {
   testDewPointKnownValues();
   testDewPointGuards();
@@ -219,6 +301,12 @@ int main() {
   testNoWaterTempFailSafe();
   testTankOnlyFloorCheck();
   testPipesOnlyFloorCheck();
+  testOfflineIndoorDemand();
+  testOfflineIgnoresOutdoorValues();
+  testOfflineNoHumidityFailsSafe();
+  testOfflineCoolIndoor();
+  testOfflineCondensationFloor();
+  testOfflineNoColdPointFailsSafe();
 
   printf("\n%d check(s), %d failure(s)\n", g_checks, g_failures);
   return g_failures == 0 ? 0 : 1;
