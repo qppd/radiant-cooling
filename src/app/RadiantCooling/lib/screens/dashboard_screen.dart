@@ -100,9 +100,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             stream: widget.firebase.heartbeatStream(),
             linkedId: widget.linkedId!,
             time: _time,
-          ),
-          const SizedBox(height: 12),
-          SectionCard(
+                      ),
+                      const SizedBox(height: 12),
+                      _ControlSourceBadge(firebase: widget.firebase),
+                      const SizedBox(height: 12),
+                      SectionCard(
             title: 'Room climate',
             icon: Icons.thermostat_outlined,
             child: StreamBuilder<DhTelemetry>(
@@ -599,6 +601,67 @@ class _StatusTile extends StatelessWidget {
               ),
         ),
       ],
+    );
+  }
+}
+
+class _ControlSourceBadge extends StatelessWidget {
+  const _ControlSourceBadge({required this.firebase});
+
+  final RadiantFirebase firebase;
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<MonitorTelemetry>(
+      stream: firebase.monitorStream(),
+      builder: (context, snap) {
+        final source = snap.data?.controlSource;
+        String label;
+        IconData icon;
+        Color color;
+        switch (source) {
+          case 'weather+sensors':
+            label = 'Weather + Sensors';
+            icon = Icons.cloud_outlined;
+            color = Colors.green.shade700;
+            break;
+          case 'sensors_only':
+            label = 'Sensors Only';
+            icon = Icons.wifi_off;
+            color = Colors.orange.shade700;
+            break;
+          case 'failsafe':
+            label = 'Failsafe';
+            icon = Icons.warning_amber_rounded;
+            color = Colors.red.shade700;
+            break;
+          default:
+            // No telemetry yet or unknown source — show nothing
+            return const SizedBox.shrink();
+        }
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: 0.4)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 18, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

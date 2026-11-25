@@ -9,6 +9,14 @@ bool _flag(Map<dynamic, dynamic>? m, String key, String onValue) {
   return m?[key] == onValue;
 }
 
+bool _flagAny(Map<dynamic, dynamic>? m, List<String> keys) {
+  for (final key in keys) {
+    final v = m?[key];
+    if (v == 'on' || v == true || v == 1) return true;
+  }
+  return false;
+}
+
 List<double?> _list(Map<dynamic, dynamic>? m, String key) {
   final v = m?[key];
   if (v is! List) return const [];
@@ -52,6 +60,9 @@ class MonitorTelemetry {
   /// 'auto' or 'manual'; null before the gateway has reported any mode.
   final String? mode;
 
+  /// Control source: 'weather+sensors', 'sensors_only', or 'failsafe'.
+  final String? controlSource;
+
   final int? ts;
 
   factory MonitorTelemetry.fromMap(Map<dynamic, dynamic>? m) =>
@@ -68,6 +79,7 @@ class MonitorTelemetry {
         waterFloorC: _num(m, 'water_floor_c'),
         pumpsOn: _flag(m, 'pumps', 'on'),
         mode: m?['mode'] as String?,
+        controlSource: m?['control_source'] as String?,
         ts: m?['ts'] is int ? m!['ts'] as int : null,
       );
 }
@@ -89,13 +101,19 @@ class ChillerTelemetry {
   final bool pump1On;
   final int? ts;
 
+  /// SSR1 is shared by the compressor and condenser fan.
+  bool get condenserFanOn => compressorOn;
+
+  /// SSR2 is the outgoing pump (`outgoing_pump` on newer firmware).
+  bool get outgoingPumpOn => pump1On;
+
   factory ChillerTelemetry.fromMap(Map<dynamic, dynamic>? m) =>
       ChillerTelemetry(
         outgoingTempC: _num(m, 'outgoing_temp_c'),
         ingoingTempC: _num(m, 'ingoing_temp_c'),
         waterTempC: _num(m, 'water_temp_c'),
-        compressorOn: _flag(m, 'compressor', 'on'),
-        pump1On: _flag(m, 'pump1', 'on'),
+        compressorOn: _flagAny(m, ['compressor', 'condenser_fan']),
+        pump1On: _flagAny(m, ['outgoing_pump', 'pump1']),
         ts: m?['ts'] is int ? m!['ts'] as int : null,
       );
 }
@@ -129,9 +147,12 @@ class ChillerState {
   final bool compressorOn;
   final bool pump1On;
 
+  bool get condenserFanOn => compressorOn;
+  bool get outgoingPumpOn => pump1On;
+
   factory ChillerState.fromMap(Map<dynamic, dynamic>? m) => ChillerState(
-        compressorOn: _flag(m, 'compressor', 'on'),
-        pump1On: _flag(m, 'pump1', 'on'),
+        compressorOn: _flagAny(m, ['compressor', 'condenser_fan']),
+        pump1On: _flagAny(m, ['outgoing_pump', 'pump1']),
       );
 }
 

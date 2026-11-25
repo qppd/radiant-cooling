@@ -19,10 +19,13 @@ flowchart TD
     E -->|No| G["Sensor-only: drop outdoor inputs,<br/>re-pin radio to ESP_NOW_CHANNEL"]
     F --> H["Compute dew point floor + pump decision"]
     G --> H
-    H --> I{"Decision changed OR<br/>60 s resend due?"}
+    H --> M{"Manual mode?"}
+    M -->|No (auto)| I{"Decision changed OR<br/>60 s resend due?"}
+    M -->|Yes| N["Send set_compressor + set_outgoing_pump<br/>(on app command / 60 s resend)"]
     I -->|Yes| J["Send set_pumps to chiller"]
     I -->|No| K{"Firebase ready?"}
     J --> K
+    N --> K
     K -->|Yes| L["Write telemetry/heartbeat +<br/>process radiant/config stream"]
     K -->|No| M["Skip cloud writes - keep controlling locally"]
     L --> N["Offline: retry Wi-Fi every 60 s;<br/>Firebase backoff 60 s to 5 min"]
@@ -72,7 +75,7 @@ flowchart TD
     I -->|Yes| J{"Coldest pipe/tank above floor<br/>(+ hysteresis when starting)?"}
     J -->|No| OFF
     J -->|Yes| ON["Pumps ON"]
-    ON --> K["Send set_pumps on change,<br/>then re-send every 60 s"]
+    ON --> K["Auto: send set_pumps on change,<br/>then re-send every 60 s"]
     OFF --> K
 ```
 
@@ -83,7 +86,57 @@ flowchart TD
 > pumps are already running. With no valid dew point (or no valid pipe/tank
 > temperature) the decision is **OFF** (fail-safe).
 
-## 3. Dehumidifier Control Logic
+**Manual mode:** the gateway does not run the decision above. It forwards
+the app's independent `set_compressor` (SSR1: compressor + condenser fan +
+chiller pump) and `set_outgoing_pump` (SSR2) commands, and re-sends them
+every 60 s.
+
+## 4. Offline / Sensor-Only Control Path
+
+When Wi-Fi is unavailable (no router, no internet, or Firebase/WeatherAPI
+unreachable), the gateway automatically switches to **sensor-only** mode.
+The ESP-NOW mesh remains operational because all peers pin their radios to
+the fixed `ESP_NOW_CHANNEL` (default 6), independent of the router.
+
+### Offline Decision Flow
+
+```mermaid
+flowchart TD
+    A["Wi-Fi lost or weather stale (> WEATHER_STALE_S)"] --> B["Drop outdoor inputs immediately"]
+    B --> C["Re-pin radio to ESP_NOW_CHANNEL"]
+    C --> D["Control source = 'sensors_only'"]
+    D --> E["Indoor dew point = Magnus(DHT22 temp, humidity)"]
+    E --> F["Ref dew point = indoor only (no outdoor)"]
+    F --> G["Water floor = indoor dew point + margin"]
+    G --> H{"Sensor demand?<br/>(indoor temp > comfort setpoint)"}
+    H -->|No| OFF["Pumps OFF"]
+    H -->|Yes| I{"Dew point known?"}
+    I -->|No| OFF
+    I -->|Yes| J{"Coldest pipe/tank above floor<br/>(+ hysteresis)?"}
+    J -->|No| OFF
+    J -->|Yes| ON["Pumps ON"]
+    ON --> K["Send set_pumps / resend every 60 s"]
+    OFF --> K
+```
+
+### Offline Behavior Summary
+
+| Condition | Control Source | Dew Point Reference | Weather Demand | Behavior |
+|-----------|----------------|---------------------|----------------|----------|
+| Wi-Fi up, weather fresh | `weather+sensors` | max(outdoor, indoor) | outdoor > 28 °C | Normal weather-aware control |
+| Wi-Fi up, weather stale (>1h) | `sensors_only` | indoor only | **true** (assumed) | Indoor sensors drive |
+| No Wi-Fi | `sensors_only` | indoor only | **true** (assumed) | Indoor sensors drive |
+| No valid indoor dew point | `failsafe` | — | — | **Pumps held OFF** |
+
+### Key Offline Guarantees
+
+- **No reboot on network loss** — `WifiProvisioner` retries in background every 60 s
+- **ESP-NOW always works** — radio pinned to fixed channel while AP missing
+- **Config survives power cycle** — NVS caches comfort setpoint, dew-point margin, weather threshold, DH setpoints
+- **Auto-recovery** — on Wi-Fi restore: weather fetched immediately, Firebase streams resume, control returns to weather+sensors
+- **Fail-safe** — unknown dew point or pipe temp → pumps OFF (condensation protection)
+
+## 5. Dehumidifier Control Logic
 
 `DehumidifierController` — holds indoor relative humidity at the **55%**
 setpoint (read from its own DHT22), with hysteresis. The humidity reading is
@@ -114,3 +167,6 @@ flowchart TD
 - **Fail-safe behaviour:** per-controller local guards sit below these flows
   (chiller: water-sensor loss → pumps off; dehumidifier: 3 failed DHT22
   reads → output off; gateway: unknown dew point/cold point → pumps off).
+- **App UX:** the dashboard shows a **Control Source** badge reflecting the
+  gateway's `control_source` telemetry field: `weather+sensors` (green),
+  `sensors_only` (amber), or `failsafe` (red).

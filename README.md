@@ -48,9 +48,10 @@ installation. Three ESP32 boards form a wireless mesh:
   weather (API key managed by the app), and pushes everything to Firebase —
   while also computing the chiller pump control (weather-driven +
   condensation protection).
-- **WaterChillerController** switches the **compressor + water pump (SSR)**
-  on command from the gateway, and reports the tank water temperature
-  (outgoing + ingoing DS18B20).
+- **WaterChillerController** switches the **compressor + condenser fan +
+  chiller pump on SSR1** and the **outgoing pump on SSR2**, on command from
+  the gateway, and reports the tank water temperature (outgoing + ingoing
+  DS18B20).
 - **DehumidifierController** holds indoor humidity at **55% RH** with its
   DHT22.
 
@@ -61,6 +62,17 @@ Cloud connectivity is optional. If the router, internet, Firebase or
 WeatherAPI is unavailable, the gateway keeps controlling the plant **locally
 from its sensors** and automatically returns to the weather+cloud path when
 the link comes back.
+
+### Offline Operation Details
+
+| Scenario | Behavior |
+|----------|----------|
+| **No Wi-Fi / no router** | ESP-NOW mesh stays alive (radio pinned to fixed channel). Gateway runs sensor-only control using indoor DHT22 dew point + ceiling pipe temps. No Firebase or WeatherAPI traffic attempted. |
+| **Wi-Fi connected, no internet** | Same as above — gateway detects no internet, drops weather feed, switches to indoor dew point for condensation floor. ESP-NOW and local control continue uninterrupted. |
+| **Firebase offline** | Cloud writes suspended with exponential backoff (60 s → 5 min). Local NVS caches last config so offline reboot keeps tuned values. ESP-NOW commands still reach chiller/dehumidifier. |
+| **Reconnect** | Automatic: weather fetched immediately, Firebase streams resume, control returns to weather+sensors mode seamlessly. |
+
+The system has **no dependency on cloud connectivity** for core cooling/dehumidification functions. The app, Firebase, and WeatherAPI are observation + configuration channels only.
 
 ## Features
 
@@ -74,6 +86,9 @@ the link comes back.
   gateway runs **sensor-only**: weather demand is replaced by indoor demand,
   the floor uses the indoor dew point, pump commands are held/retried, and
   Firebase + WeatherAPI work is suspended until the link returns
+- **Manual output control** - the app can switch SSR1 (compressor +
+  condenser fan + chiller pump) and SSR2 (outgoing pump) independently in
+  manual mode; auto mode still switches both together
 - **Dehumidifier** — holds indoor RH at 55% with hysteresis
 - **WiFiManager provisioning** — captive portal only when no credentials are
   saved (or the reset button is held 3 s); offline reconnects run in the
@@ -112,7 +127,7 @@ Full diagrams: [`docs/diagrams/`](docs/diagrams/) · [`docs/schematic/pin-map.md
 | Board                       | Sensors                           | Actuators (SSR)           | Role     |
 | --------------------------- | --------------------------------- | ------------------------- | -------- |
 | `RadiantCoolingMonitor`     | 4× DS18B20 ceiling (GPIO 23/21/18/5, one bus each) | —                         | Gateway  |
-| `WaterChillerController`    | 2× DS18B20 tank (GPIO 5 out / 18 in) | 2× SSR → compressor + pump (23, 19) | Peer     |
+| `WaterChillerController`    | 2× DS18B20 tank (GPIO 5 out / 18 in) | 2× SSR → compressor + fan + chiller pump (23), outgoing pump (19) | Peer     |
 | `DehumidifierController`    | 1× DHT22 (GPIO 25)                | 1× SSR → dehumidifier (23)| Peer     |
 
 All pins are boot/Wi-Fi-safe for the 38-pin ESP32 variant — see the

@@ -38,13 +38,33 @@ pull-up; GPIO25 is ADC2 but only used as a digital input).
 | `RadiantCoolingMonitor` | 18  | DS18B20 ceiling sensor 3           | own 1-Wire bus; 4.7kΩ pull-up to 3V3 |
 | `RadiantCoolingMonitor` | 5   | DS18B20 ceiling sensor 4           | own 1-Wire bus; 4.7kΩ pull-up to 3V3; strapping pin held at its default HIGH by the pull-up, so boot is unaffected |
 | `RadiantCoolingMonitor` | 25  | WiFi reset button                   | momentary switch to GND, INPUT_PULLUP; hold 3 s to erase WiFi credentials |
-| `WaterChillerController`| 23  | SSR → compressor                    | SSR input (see wiring note)  |
-| `WaterChillerController`| 19  | Relay IN → water pump               | Relay input (see wiring note)|
+| `WaterChillerController`| 23  | SSR1 → compressor + condenser fan + chiller pump | SSR input (see wiring note) |
+| `WaterChillerController`| 19  | Relay IN → outgoing pump            | Relay input (see wiring note)|
 | `WaterChillerController`| 18  | DS18B20 → ingoing water (to tank)   | DAT; own 1-Wire bus, pull-up |
 | `WaterChillerController`| 5   | DS18B20 → outgoing water (from tank)| DAT; own bus; strapping pin held HIGH by the pull-up |
 | `DehumidifierController`| 23  | SSR → dehumidifier                 | SSR input (see wiring note)  |
 | `DehumidifierController`| 25  | DHT22 data                         | 10kΩ pull-up to 3V3          |
 | (spare)                 | 21, 22, 32, 33    | —                         | free on the gateway + chiller boards |
+
+## Chiller output grouping
+
+The chiller has two SSR/relay outputs, both controlled independently in
+manual mode and together in auto mode:
+
+| Output | GPIO | Load |
+| ------ | ---- | ---- |
+| SSR1   | 23   | Compressor + condenser fan + chiller pump (parallel on one SSR) |
+| SSR2   | 19   | Outgoing pump |
+
+The compressor and condenser fan must always run together, so they share
+SSR1. The chiller pump (water circulator inside the chiller unit) is also
+wired to SSR1 because it must run whenever the compressor runs — all three
+loads are energized in parallel from a single SSR output. This eliminates the
+need for a third output and guarantees the condenser fan and water pump are
+never out of sync with the compressor.
+
+The app labels SSR1 as **Compressor + condenser fan** and SSR2 as
+**Outgoing pump**.
 
 ## Wiring notes
 
