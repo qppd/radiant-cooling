@@ -27,15 +27,17 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('shows the not-linked view when no system is linked',
-      (tester) async {
+  testWidgets('shows the not-linked view when no system is linked', (
+    tester,
+  ) async {
     await pumpDashboard(tester, FakeRadiantFirebase(), linkedId: null);
 
     expect(find.text('No system linked yet'), findsOneWidget);
   });
 
-  testWidgets('renders live telemetry, control state, and safety values',
-      (tester) async {
+  testWidgets('renders live telemetry, control state, and safety values', (
+    tester,
+  ) async {
     final firebase = FakeRadiantFirebase(
       heartbeat: const Heartbeat(
         online: true,
@@ -77,8 +79,8 @@ void main() {
     expect(find.text('22.4 °C'), findsOneWidget);
 
     expect(find.text('Room climate'), findsOneWidget);
-    expect(find.text('Compressor'), findsOneWidget);
-    expect(find.text('Water pump'), findsOneWidget);
+    expect(find.text('Compressor + fan'), findsOneWidget);
+    expect(find.text('Outgoing pump'), findsOneWidget);
     expect(find.text('Dehumidifier'), findsWidgets);
     expect(find.text('ON'), findsNWidgets(2));
     expect(find.text('OFF'), findsOneWidget);
@@ -92,8 +94,9 @@ void main() {
     expect(find.textContaining('device RADIANT-001'), findsOneWidget);
   });
 
-  testWidgets('renders an offline gateway and empty-sensor placeholders',
-      (tester) async {
+  testWidgets('renders an offline gateway and empty-sensor placeholders', (
+    tester,
+  ) async {
     final firebase = FakeRadiantFirebase(
       heartbeat: const Heartbeat(online: false, deviceId: 'RADIANT-001'),
       monitor: const MonitorTelemetry(),
@@ -109,33 +112,23 @@ void main() {
     expect(find.text('—'), findsWidgets);
   });
 
-  testWidgets('control card follows the control node, not the slow telemetry',
-      (tester) async {
+  testWidgets('manual mode exposes separate compressor and pump switches', (
+    tester,
+  ) async {
     final firebase = FakeRadiantFirebase(
-      // What the app just toggled...
-      controlState: const ControlState(pumpsOn: true, mode: 'manual'),
-      // ...versus the gateway's last 30 s telemetry snapshot.
+      // What the app just commanded...
+      controlState: const ControlState(
+        mode: 'manual',
+        compressorOn: true,
+        outgoingPumpOn: false,
+      ),
+      // ...versus the gateway's last telemetry snapshot.
       monitor: const MonitorTelemetry(pumpsOn: false, mode: 'auto'),
       heartbeat: const Heartbeat(online: true, deviceId: 'RADIANT-001'),
-      chillerState: const ChillerState(),
+      chillerState: const ChillerState(compressorOn: false, pump1On: true),
     );
     await pumpDashboard(tester, firebase);
 
-    // Manual mode: the card believes the command, so OFF is the action offered.
-    expect(
-      tester
-          .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Pumps OFF'))
-          .onPressed,
-      isNotNull,
-    );
-    expect(
-      tester
-          .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Pumps ON'))
-          .onPressed,
-      isNull,
-    );
     expect(
       tester
           .widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'manual'))
@@ -143,36 +136,56 @@ void main() {
       isTrue,
     );
 
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Pumps OFF'));
+    final compressor = tester.widget<SwitchListTile>(
+      find.byKey(const ValueKey('compressor-switch')),
+    );
+    final outgoing = tester.widget<SwitchListTile>(
+      find.byKey(const ValueKey('outgoing-pump-switch')),
+    );
+    expect(compressor.value, isTrue);
+    expect(outgoing.value, isFalse);
+    expect(find.text('Compressor + condenser fan'), findsOneWidget);
+    expect(find.text('Outgoing pump'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('compressor-switch')));
     await tester.pump();
-    expect(firebase.lastPumpsWrite, isFalse);
+    expect(firebase.lastCompressorWrite, isFalse);
+
+    await tester.tap(find.byKey(const ValueKey('outgoing-pump-switch')));
+    await tester.pump();
+    expect(firebase.lastOutgoingPumpWrite, isTrue);
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'auto'));
     await tester.pump();
     expect(firebase.lastModeWrite, 'auto');
   });
 
-  testWidgets('in auto mode the card shows what the gateway decided',
-      (tester) async {
+  testWidgets('auto mode shows outputs read-only', (tester) async {
     final firebase = FakeRadiantFirebase(
-      controlState: const ControlState(pumpsOn: false, mode: 'auto'),
+      controlState: const ControlState(mode: 'auto'),
       monitor: const MonitorTelemetry(pumpsOn: true, mode: 'auto'),
       heartbeat: const Heartbeat(online: true, deviceId: 'RADIANT-001'),
-      chillerState: const ChillerState(),
+      chillerState: const ChillerState(compressorOn: true, pump1On: false),
     );
     await pumpDashboard(tester, firebase);
 
-    expect(
-      tester
-          .widget<OutlinedButton>(
-              find.widgetWithText(OutlinedButton, 'Pumps OFF'))
-          .onPressed,
-      isNotNull,
-    );
+    expect(find.byKey(const ValueKey('compressor-switch')), findsNothing);
+    expect(find.byKey(const ValueKey('outgoing-pump-switch')), findsNothing);
+    expect(find.text('Compressor + fan'), findsOneWidget);
+    expect(find.text('Outgoing pump'), findsOneWidget);
+
+    // Entering manual mode seeds the control node with the current plant
+    // state, so an old manual command cannot start the compressor.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'manual'));
+    await tester.pump();
+    expect(firebase.lastManualCompressorWrite, isTrue);
+    expect(firebase.lastManualOutgoingPumpWrite, isFalse);
+    expect(firebase.lastModeWrite, 'manual');
   });
 
-  testWidgets('outdoor weather prefers the gateway weather node',
-      (tester) async {
+  testWidgets('outdoor weather prefers the gateway weather node', (
+    tester,
+  ) async {
     final firebase = FakeRadiantFirebase(
       weatherNow: const WeatherNow(
         tempC: 33.5,
@@ -198,8 +211,9 @@ void main() {
     expect(find.textContaining('Light rain'), findsOneWidget);
   });
 
-  testWidgets('outdoor weather falls back to monitor telemetry',
-      (tester) async {
+  testWidgets('outdoor weather falls back to monitor telemetry', (
+    tester,
+  ) async {
     final firebase = FakeRadiantFirebase(
       monitor: const MonitorTelemetry(
         outdoorTempC: 31.2,

@@ -43,15 +43,36 @@ void sendStatus() {
   sendMsg(MsgType::Status, payload);
 }
 
+void sendOutputsState() {
+  JsonDocument payload;
+  payload["compressor"]    = compressor.isOn() ? "on" : "off";
+  payload["condenser_fan"] = compressor.isOn() ? "on" : "off"; // same SSR
+  payload["pump1"]         = pump1.isOn() ? "on" : "off";
+  payload["outgoing_pump"] = pump1.isOn() ? "on" : "off";
+  sendMsg(MsgType::State, payload);
+}
+
+// Auto mode / fail-safe: both SSRs together.
 void setPumps(bool on) {
   if (compressor.isOn() == on && pump1.isOn() == on) return;
   compressor.set(on);
   pump1.set(on);
-  JsonDocument payload;
-  payload["compressor"] = on ? "on" : "off";
-  payload["pump1"] = on ? "on" : "off";
-  sendMsg(MsgType::State, payload);
-  Serial.printf("[chiller] pumps %s\n", on ? "ON" : "OFF");
+  sendOutputsState();
+  Serial.printf("[chiller] outputs %s\n", on ? "ON" : "OFF");
+}
+
+// Manual mode: SSR 1 alone (compressor + condenser fan + chiller pump).
+void setCompressor(bool on) {
+  compressor.set(on);
+  sendOutputsState();
+  Serial.printf("[chiller] compressor + condenser fan %s\n", on ? "ON" : "OFF");
+}
+
+// Manual mode: SSR 2 alone (outgoing pump).
+void setOutgoingPump(bool on) {
+  pump1.set(on);
+  sendOutputsState();
+  Serial.printf("[chiller] outgoing pump %s\n", on ? "ON" : "OFF");
 }
 
 // Coldest valid tank sensor reading - reported as water_temp_c, which the
@@ -84,10 +105,16 @@ void handleSendResult(const uint8_t* mac, bool success) {
 
 void handleCmd(const IncomingMessage& msg) {
   const char* cmd = msg.data["cmd"] | "";
+  const bool on = String(msg.data["value"] | "") == "on";
+
   if (strcmp(cmd, "set_pumps") == 0) {
-    setPumps(String(msg.data["value"] | "") == "on");
-  }
-  else {
+    setPumps(on);
+  } else if (strcmp(cmd, "set_compressor") == 0) {
+    setCompressor(on);
+  } else if (strcmp(cmd, "set_outgoing_pump") == 0 ||
+             strcmp(cmd, "set_pump1") == 0) {
+    setOutgoingPump(on);
+  } else {
     Serial.printf("[chiller] unknown cmd: %s\n", cmd);
   }
 }
@@ -101,9 +128,10 @@ void printTestHelp() {  Serial.println();
   Serial.println("help                       - show this menu");
   Serial.println("temps                      - read both DS18B20 tank sensors (outgoing / ingoing)");
   Serial.println("temp outgoing|ingoing      - read one DS18B20 by name (out / in also work)");
-  Serial.println("ssr                        - show compressor + pump relay output states");
-  Serial.printf ("compressor on|off|toggle   - drive compressor SSR (GPIO %d)\n", PIN_SSR_COMPRESSOR);
-  Serial.printf ("pump1 on|off|toggle        - drive pump relay (GPIO %d)\n", PIN_RELAY_PUMP1);
+  Serial.println("ssr                        - show SSR1 (compressor/fan) + SSR2 (outgoing pump)");
+  Serial.printf ("compressor on|off|toggle   - SSR1: compressor + condenser fan (GPIO %d)\n", PIN_SSR_COMPRESSOR);
+  Serial.printf ("outgoing on|off|toggle     - SSR2: outgoing pump (GPIO %d)\n", PIN_RELAY_PUMP1);
+  Serial.printf ("pump1 on|off|toggle        - alias for outgoing (GPIO %d)\n", PIN_RELAY_PUMP1);
   Serial.println("outputs on|off             - drive both at once + report state to gateway");
   Serial.println("espnow                     - send status frame to gateway (link test)");
   Serial.println("status                     - dump current sensor + output state");
@@ -155,7 +183,8 @@ void driveOutput(SsrOutput& out, const char* label, uint8_t pin, String arg) {
 }
 
 void printOutputStates() {
-  Serial.printf("[test] compressor GPIO%d = %s | pump1 GPIO%d = %s\n",
+  Serial.printf("[test] SSR1 compressor+condenser fan GPIO%d = %s | "
+                "SSR2 outgoing pump GPIO%d = %s\n",
                 PIN_SSR_COMPRESSOR, compressor.isOn() ? "ON" : "OFF",
                 PIN_RELAY_PUMP1,    pump1.isOn()     ? "ON" : "OFF");
 }
@@ -198,10 +227,14 @@ void handleSerialCommand() {
     printOutputStates();
 
   } else if (cmd.startsWith("compressor ")) {
-    driveOutput(compressor, "compressor", PIN_SSR_COMPRESSOR, cmd.substring(11));
+    driveOutput(compressor, "compressor + condenser fan",
+                PIN_SSR_COMPRESSOR, cmd.substring(11));
+
+  } else if (cmd.startsWith("outgoing ")) {
+    driveOutput(pump1, "outgoing pump", PIN_RELAY_PUMP1, cmd.substring(9));
 
   } else if (cmd.startsWith("pump1 ")) {
-    driveOutput(pump1, "pump1", PIN_RELAY_PUMP1, cmd.substring(6));
+    driveOutput(pump1, "outgoing pump", PIN_RELAY_PUMP1, cmd.substring(6));
 
   } else if (cmd.startsWith("outputs ")) {
     String v = cmd.substring(8);
@@ -297,7 +330,9 @@ void loop() {
     payload["ingoing_temp_c"]  = ingoingC;
     payload["water_temp_c"]    = waterC; // coldest valid tank reading
     payload["compressor"]      = compressor.isOn() ? "on" : "off";
+    payload["condenser_fan"]   = compressor.isOn() ? "on" : "off"; // same SSR
     payload["pump1"]           = pump1.isOn() ? "on" : "off";
+    payload["outgoing_pump"]   = pump1.isOn() ? "on" : "off";
     sendMsg(MsgType::Telemetry, payload);
   }
 

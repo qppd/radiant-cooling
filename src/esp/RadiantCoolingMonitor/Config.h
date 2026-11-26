@@ -31,7 +31,7 @@ static const uint8_t IDX_SUPPLY = 0;
 static const uint8_t IDX_RETURN = 1;
 
 static const uint8_t TEMP_COUNT  = 4;
-static const uint8_t TELEMETRY_S = 30;
+static const uint8_t TELEMETRY_S = 5;
 
 // ── Offline-first networking ─────────────────────────────────────────────
 // The gateway is a local controller first and a cloud gateway second: losing

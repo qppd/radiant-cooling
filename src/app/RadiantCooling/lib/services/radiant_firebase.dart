@@ -31,13 +31,11 @@ class RadiantFirebase {
 
   /// The weather key currently live in Firebase (set previously or from
   /// another device). Null when none is stored.
-  Stream<String?> weatherKeyStream() => _cached<String?>(
-        'radiant/config/weather_key',
-        (e) {
-          final v = e.snapshot.value?.toString();
-          return (v == null || v.isEmpty) ? null : v;
-        },
-      );
+  Stream<String?> weatherKeyStream() =>
+      _cached<String?>('radiant/config/weather_key', (e) {
+        final v = e.snapshot.value?.toString();
+        return (v == null || v.isEmpty) ? null : v;
+      });
 
   Future<String?> fetchWeatherKey() async {
     final snap = await _db.ref('radiant/config/weather_key').get();
@@ -66,9 +64,33 @@ class RadiantFirebase {
   }
 
   // ── Control stream writes (the app → firmware path) ───────────────────
-  /// Set pumps on or off via the control stream.
+  /// Set pumps on or off via the control stream (combined auto-style command).
   Future<void> setPumps(bool on) async {
     await _controlRef.update({'pumps': on ? 'on' : 'off'});
+  }
+
+  /// Manual mode: SSR1 (compressor + condenser fan + chiller pump).
+  Future<void> setCompressor(bool on) async {
+    await _controlRef.update({'compressor': on ? 'on' : 'off'});
+  }
+
+  /// Manual mode: SSR2 (outgoing pump).
+  Future<void> setOutgoingPump(bool on) async {
+    await _controlRef.update({'outgoing_pump': on ? 'on' : 'off'});
+  }
+
+  /// Enter manual mode without changing the plant: seed both manual outputs
+  /// with what the chiller is doing right now, then flip the mode in the same
+  /// write. This prevents stale manual commands from starting the compressor.
+  Future<void> enterManualMode({
+    required bool compressorOn,
+    required bool outgoingPumpOn,
+  }) async {
+    await _controlRef.update({
+      'mode': 'manual',
+      'compressor': compressorOn ? 'on' : 'off',
+      'outgoing_pump': outgoingPumpOn ? 'on' : 'off',
+    });
   }
 
   /// Switch between 'auto' and 'manual' mode.
@@ -95,26 +117,27 @@ class RadiantFirebase {
   // N widgets share 1 connection.
   final Map<String, Stream<Object?>> _streams = {};
 
-  Stream<T> _cached<T>(
-    String path,
-    T Function(DatabaseEvent event) parse,
-  ) =>
+  Stream<T> _cached<T>(String path, T Function(DatabaseEvent event) parse) =>
       _streams.putIfAbsent(
-        path,
-        () => _db.ref(path).onValue.map(parse).asBroadcastStream(),
-      ) as Stream<T>;
+            path,
+            () => _db.ref(path).onValue.map(parse).asBroadcastStream(),
+          )
+          as Stream<T>;
 
-  Stream<MonitorTelemetry> monitorStream() =>
-      _cached('radiant/telemetry/monitor/latest',
-          (e) => MonitorTelemetry.fromMap(_map(e)));
+  Stream<MonitorTelemetry> monitorStream() => _cached(
+    'radiant/telemetry/monitor/latest',
+    (e) => MonitorTelemetry.fromMap(_map(e)),
+  );
 
-  Stream<ChillerTelemetry> chillerStream() =>
-      _cached('radiant/telemetry/chiller/latest',
-          (e) => ChillerTelemetry.fromMap(_map(e)));
+  Stream<ChillerTelemetry> chillerStream() => _cached(
+    'radiant/telemetry/chiller/latest',
+    (e) => ChillerTelemetry.fromMap(_map(e)),
+  );
 
-  Stream<DhTelemetry> dhStream() =>
-      _cached('radiant/telemetry/dh/latest',
-          (e) => DhTelemetry.fromMap(_map(e)));
+  Stream<DhTelemetry> dhStream() => _cached(
+    'radiant/telemetry/dh/latest',
+    (e) => DhTelemetry.fromMap(_map(e)),
+  );
 
   Stream<DhState> dhStateStream() =>
       _cached('radiant/state/dh', (e) => DhState.fromMap(_map(e)));
@@ -125,26 +148,28 @@ class RadiantFirebase {
   Stream<Heartbeat> heartbeatStream() =>
       _cached('radiant/heartbeat/monitor', (e) => Heartbeat.fromMap(_map(e)));
 
-  Stream<ControlParams> controlParamsStream() =>
-      _cached('radiant/config/control/params',
-          (e) => ControlParams.fromMap(_map(e)));
+  Stream<ControlParams> controlParamsStream() => _cached(
+    'radiant/config/control/params',
+    (e) => ControlParams.fromMap(_map(e)),
+  );
 
   Stream<DhConfig> dhConfigStream() =>
       _cached('radiant/config/dh', (e) => DhConfig.fromMap(_map(e)));
 
   /// The node the app writes and the gateway streams
   /// (`radiant/devices/<id>/control`). Streaming it back means a pump or mode
-  /// toggle shows up in the UI immediately instead of after the next 30 s
+  /// toggle shows up in the UI immediately instead of after the next 5 s
   /// telemetry cycle.
   Stream<ControlState> controlStream(String systemId) => _cached(
-        'radiant/devices/$systemId/control',
-        (e) => ControlState.fromMap(_map(e)),
-      );
+    'radiant/devices/$systemId/control',
+    (e) => ControlState.fromMap(_map(e)),
+  );
 
   /// Outdoor weather the gateway fetched from WeatherAPI.
-  Stream<WeatherNow> weatherStream() =>
-      _cached('radiant/telemetry/weather/latest',
-          (e) => WeatherNow.fromMap(_map(e)));
+  Stream<WeatherNow> weatherStream() => _cached(
+    'radiant/telemetry/weather/latest',
+    (e) => WeatherNow.fromMap(_map(e)),
+  );
 
   // ── Device registry liveness ───────────────────────────────────────────
   /// Record whether [device] is alive. Written by the app watchdog, because a
@@ -236,25 +261,43 @@ class ControlParams {
   final double weatherCoolTempC;
 
   factory ControlParams.fromMap(Map<dynamic, dynamic>? m) => ControlParams(
-        comfortSetpointC: _num(m, 'comfort_setpoint_c') ?? 24,
-        dewpointMarginC: _num(m, 'dewpoint_margin_c') ?? 2,
-        weatherCoolTempC: _num(m, 'weather_cool_temp_c') ?? 28,
-      );
+    comfortSetpointC: _num(m, 'comfort_setpoint_c') ?? 24,
+    dewpointMarginC: _num(m, 'dewpoint_margin_c') ?? 2,
+    weatherCoolTempC: _num(m, 'weather_cool_temp_c') ?? 28,
+  );
 }
 
 /// State of the app-writable control node (`.../control`).
 class ControlState {
-  const ControlState({this.pumpsOn = false, this.mode});
+  const ControlState({
+    this.pumpsOn = false,
+    this.mode,
+    this.compressorOn,
+    this.outgoingPumpOn,
+  });
 
   final bool pumpsOn;
 
   /// 'auto' or 'manual'; null when nothing has been commanded yet.
   final String? mode;
 
+  /// Manual-mode commands; null until the app has written them.
+  final bool? compressorOn;
+  final bool? outgoingPumpOn;
+
   factory ControlState.fromMap(Map<dynamic, dynamic>? m) => ControlState(
-        pumpsOn: m?['pumps'] == 'on' || m?['pumps'] == true,
-        mode: m?['mode'] as String?,
-      );
+    pumpsOn: m?['pumps'] == 'on' || m?['pumps'] == true,
+    mode: m?['mode'] as String?,
+    compressorOn: _flagOrNull(m, 'compressor'),
+    outgoingPumpOn: _flagOrNull(m, 'outgoing_pump'),
+  );
+}
+
+bool? _flagOrNull(Map<dynamic, dynamic>? m, String key) {
+  final v = m?[key];
+  if (v == 'on' || v == true || v == 1) return true;
+  if (v == 'off' || v == false || v == 0) return false;
+  return null;
 }
 
 class DhConfig {
@@ -263,7 +306,7 @@ class DhConfig {
   final double humiditySetpointPct;
   final double humidityDeadbandPct;
   factory DhConfig.fromMap(Map<dynamic, dynamic>? m) => DhConfig(
-        humiditySetpointPct: _num(m, 'humidity_setpoint_pct') ?? 55,
-        humidityDeadbandPct: _num(m, 'humidity_deadband_pct') ?? 5,
-      );
+    humiditySetpointPct: _num(m, 'humidity_setpoint_pct') ?? 55,
+    humidityDeadbandPct: _num(m, 'humidity_deadband_pct') ?? 5,
+  );
 }

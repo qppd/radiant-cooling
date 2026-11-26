@@ -26,15 +26,14 @@ Future<void> _loadRealFonts() async {
       (await File('$dir/$file').readAsBytes()).buffer.asByteData();
 
   if (!File('$dir/segoeui.ttf').existsSync()) return;
-  final loader = FontLoader('Roboto')
-    ..addFont(bytes('segoeui.ttf'));
+  final loader = FontLoader('Roboto')..addFont(bytes('segoeui.ttf'));
   await loader.load();
 }
 
 ThemeData _theme() => ThemeData(
-  colorScheme: ColorScheme.fromSeed(seedColor: Colors.cyan),
-  useMaterial3: true,
-);
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.cyan),
+      useMaterial3: true,
+    );
 
 void _setPhone(WidgetTester tester) {
   tester.view.physicalSize = _phoneSize;
@@ -76,10 +75,8 @@ void main() {
   testWidgets('screenshots: link device', (tester) async {
     _setPhone(tester);
     SharedPreferences.setMockInitialValues({});
-    final firebase = FakeRadiantFirebase()..knownSystems = [
-      'RADIANT-001',
-      'RADIANT-002',
-    ];
+    final firebase = FakeRadiantFirebase()
+      ..knownSystems = ['RADIANT-001', 'RADIANT-002'];
     await _pumpApp(
       tester,
       LinkDeviceScreen(
@@ -115,6 +112,11 @@ void main() {
       dh: const DhTelemetry(tempC: 27.4, humidityPct: 68),
       dhState: const DhState(on: true),
       chillerState: const ChillerState(pump1On: true, compressorOn: true),
+      controlState: const ControlState(
+        mode: 'manual',
+        compressorOn: true,
+        outgoingPumpOn: true,
+      ),
       controlParams: const ControlParams(),
     );
     await _pumpApp(

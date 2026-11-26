@@ -73,7 +73,7 @@ radiant/
 │   └── weather/
 │       └── latest               # gateway's WeatherAPI reading (see §4)
 ├── state/                       # current actuator states
-│   ├── chiller/                 # { compressor, pump1 }
+│   ├── chiller/                 # { compressor, condenser_fan, outgoing_pump }
 │   └── dh/                      # { dehumidifier }
 ├── config/                      # writable by app, consumed by firmware
 │   ├── control/                 # gateway control params (chiller computation)
@@ -105,7 +105,8 @@ supply/return):
   "delta_t_c": 0.6, "outdoor_temp_c": 31.2, "outdoor_dewpoint_c": 24.5,
   "outdoor_humidity_pct": 66.0, "weather_valid": true,
   "control_source": "weather+sensors", "dew_point_c": 18.0,
-  "water_floor_c": 20.0, "pumps": "on", "ts": 1786119829 }
+  "water_floor_c": 20.0, "pumps": "on", "compressor": "on",
+  "condenser_fan": "on", "outgoing_pump": "off", "ts": 1786119829 }
 ```
 
 > With no usable weather the `outdoor_*` fields are the `-100` invalid
@@ -117,8 +118,8 @@ supply/return):
 
 ```json
 { "outgoing_temp_c": 16.2, "ingoing_temp_c": 16.8,
-  "water_temp_c": 16.2, "compressor": "on", "pump1": "on",
-  "ts": 1786119829 }
+  "water_temp_c": 16.2, "compressor": "on", "condenser_fan": "on",
+  "pump1": "on", "outgoing_pump": "on", "ts": 1786119829 }
 ```
 
 `dh` (DHT22):
@@ -128,7 +129,7 @@ supply/return):
 ```
 
 `weather` (written by the gateway right after each WeatherAPI fetch, so the
-app does not have to wait for the 30 s monitor cycle):
+app does not have to wait for the 5 s monitor cycle):
 
 ```json
 { "location": "Manila", "temp_c": 31.2, "feels_like_c": 36.0,
@@ -144,7 +145,8 @@ app does not have to wait for the 30 s monitor cycle):
 ### 3.2 `state/<device>`
 
 ```json
-{ "compressor": "on", "pump1": "on" }       // chiller
+{ "compressor": "on", "condenser_fan": "on",
+  "pump1": "on", "outgoing_pump": "on" }       // chiller
 { "dehumidifier": "on" }                 // dh
 ```
 
@@ -163,6 +165,29 @@ app does not have to wait for the 30 s monitor cycle):
 | `humidity_setpoint_pct` | `dh`      | float  | Dehumidifier target RH (%) — **55**            |
 | `humidity_deadband_pct` | `dh`      | float  | RH hysteresis (%)                              |
 | `weather_key` (node)    | `weather_key` | string | WeatherAPI key delivered to the gateway — see §4 |
+
+### 3.4 `devices/<SYSTEM_ID>/control` (app -> gateway)
+
+The dashboard writes this node; the gateway streams it for immediate
+response. `mode` selects auto or manual. The two output keys are acted on
+**only in manual mode**; auto mode uses the computed `set_pumps` command.
+
+```json
+{ "mode": "manual", "compressor": "on", "outgoing_pump": "off" }
+```
+
+| Key | Type | Meaning |
+| --- | --- | --- |
+| `mode` | string | `auto` or `manual` |
+| `compressor` | string | Manual SSR1: compressor + condenser fan + chiller pump (`on`/`off`) |
+| `outgoing_pump` | string | Manual SSR2: outgoing pump (`on`/`off`) |
+| `pumps` | string | Legacy combined command; sets both outputs |
+
+The app writes `mode`, `compressor` and `outgoing_pump` together when it
+enters manual mode, seeded with the chiller's current state, so an old manual
+command cannot start the compressor unexpectedly. The gateway re-sends the
+two manual states every 60 s (and after a chiller reboot). In auto mode the
+gateway drives both outputs together with `set_pumps`.
 
 ## 4. Weather API (monitor board fetches; key managed by the app)
 
@@ -232,8 +257,8 @@ firmware.
 
 | Type        | Direction                | Payload example                                      |
 | ----------- | ------------------------ | ---------------------------------------------------- |
-| `telemetry` | peer → gateway           | `{ "water_temp_c": 16.2, "pump1": "on", ... }`      |
-| `state`     | peer → gateway           | `{ "compressor": "on", "pump1": "on" }`            |
+| `telemetry` | peer → gateway           | `{ "water_temp_c": 16.2, "compressor": "on", "outgoing_pump": "on", ... }`      |
+| `state`     | peer → gateway           | `{ "compressor": "on", "condenser_fan": "on", "outgoing_pump": "on" }`            |
 | `cmd`       | gateway → peer           | `{ "cmd": "set_pumps", "value": "on" }`            |
 | `config`    | gateway → peer           | `{ "humidity_setpoint_pct": 55.0, "humidity_deadband_pct": 5.0 }` |
 | `status`    | both                     | `{ "online": true, "firmware": "0.1.0" }`            |
@@ -242,7 +267,9 @@ firmware.
 
 | Command                | Target  | Value           |
 | ---------------------- | ------- | --------------- |
-| `set_pumps`            | chiller | `"on"` / `"off"` |
+| `set_pumps`            | chiller | `"on"` / `"off"` (both outputs) |
+| `set_compressor`       | chiller | `"on"` / `"off"` (SSR1, manual) |
+| `set_outgoing_pump`    | chiller | `"on"` / `"off"` (SSR2, manual) |
 | `set_humidity_target`  | dh      | number (%RH)    |
 | `enable` / `disable`   | any     | -               |
 | `reset`                | any     | -               |
@@ -272,11 +299,13 @@ firmware.
 4. Pumps run when demand is present AND the **coldest** pipe/tank
    temperature is safely above the water floor (hysteresis applies;
    see `docs/diagrams/flow-chart.md`).
-5. On a decision change the gateway sends `set_pumps` to the chiller over
-   ESP-NOW, then **re-sends the current command every 60 s**
-   (`PUMP_CMD_RESEND_S`) so a lost frame or a peer reboot self-heals. After a
-   gateway reboot the pump state is adopted from the chiller's telemetry and
-   the cached DH config is re-sent.
+5. In **auto** mode, on a decision change the gateway sends `set_pumps`
+   (both outputs) to the chiller over ESP-NOW. In **manual** mode it forwards
+   `set_compressor` (SSR1: compressor + condenser fan + chiller pump) and
+   `set_outgoing_pump` (SSR2) independently. Either path **re-sends the
+   current command every 60 s** (`PUMP_CMD_RESEND_S`) so a lost frame or a
+   peer reboot self-heals. After a gateway reboot the output state is adopted
+   from the chiller's telemetry and the cached DH config is re-sent.
 6. Control thresholds/DH setpoints are cached in NVS and survive an offline
    power cycle; the gateway always boots in **auto** mode.
 
@@ -317,7 +346,8 @@ firmware.
   60 s → 5 min backoff, and telemetry/config resumes.
 - **State resync without the cloud:** the gateway re-sends the cached DH
   config when the DH peer reports `status`, adopts the chiller's reported
-  pump state after a gateway reboot, and periodically re-sends `set_pumps`.
+  output state after a gateway reboot, and periodically re-sends `set_pumps`
+  (auto) or the two manual commands.
 - **Command idempotence:** `set_pumps` is idempotent, so the 60 s resend is
   safe; duplicate `config`/`cmd` frames are harmless.
 - **Unknown commands** are ignored and logged on the peer.

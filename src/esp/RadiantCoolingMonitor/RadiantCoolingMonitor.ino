@@ -68,10 +68,23 @@ uint32_t seq = 0;
 ControlInputs inputs;
 ControlParams  params;
 DhConfig      dhConfig;
-bool pumpsOn = false;
+bool pumpsOn = false;            // auto mode: compressor/SSR1 + outgoing pump/SSR2
 unsigned long lastPumpCmdMs = 0;
-bool pumpCmdPending = true;   // force one command after boot / gateway restart
-bool dhConfigDirty = true;    // resend cached DH settings on first DH contact
+bool pumpCmdPending = true;      // force one command after boot / gateway restart
+bool dhConfigDirty = true;       // resend cached DH settings on first DH contact
+
+// The two physical outputs are controlled independently in manual mode:
+//   SSR1 = compressor + condenser fan (+ chiller pump)
+//   SSR2 = outgoing pump
+// Auto mode still switches both together with set_pumps.
+bool chillerCompressorOn = false;
+bool chillerOutgoingPumpOn = false;
+bool chillerOutputsKnown = false;
+bool manualCompressorOn = false;
+bool manualOutgoingPumpOn = false;
+bool manualOutputsKnown = false;
+bool manualCmdPending = false;   // assert manual outputs after a mode change
+bool autoSyncPending = false;    // force one set_pumps when returning to auto
 
 // Written by the cloud task and read by loop()/the serial console.
 volatile bool cloudOnlineFlag = false;
@@ -200,7 +213,7 @@ void serviceWeatherKey(bool force) {
 }
 
 // Publish the reading to its own node so the app has live outdoor weather
-// without waiting for the 30 s monitor telemetry cycle.
+// without waiting for the 5 s monitor telemetry cycle.
 void publishWeather(const WeatherConditions& wx) {
   JsonDocument doc;
   doc["location"]     = WEATHER_LOCATION;
@@ -378,6 +391,25 @@ void sendPumpCmd(bool on) {
   Serial.printf("[gateway] cmd chiller: set_pumps %s\n", on ? "on" : "off");
 }
 
+// Manual-mode individual outputs.
+void sendCompressorCmd(bool on) {
+  JsonDocument payload;
+  payload["cmd"]   = "set_compressor";
+  payload["value"] = on ? "on" : "off";
+  sendTo(PEER_CHILLER, MsgType::Cmd, payload);
+  lastPumpCmdMs = millis();
+  Serial.printf("[gateway] cmd chiller: set_compressor %s\n", on ? "on" : "off");
+}
+
+void sendOutgoingPumpCmd(bool on) {
+  JsonDocument payload;
+  payload["cmd"]   = "set_outgoing_pump";
+  payload["value"] = on ? "on" : "off";
+  sendTo(PEER_CHILLER, MsgType::Cmd, payload);
+  lastPumpCmdMs = millis();
+  Serial.printf("[gateway] cmd chiller: set_outgoing_pump %s\n", on ? "on" : "off");
+}
+
 // Resend the cached dehumidifier settings. The DH peer keeps them in RAM, so
 // this runs after either board reboots (and does not need Firebase).
 void sendDhConfig() {
@@ -390,21 +422,29 @@ void sendDhConfig() {
 }
 
 // Adopt the chiller's reported output state so a gateway reboot does not keep
-// a stale local "pumps off" view (hysteresis depends on currentlyOn). Ignore
+// a stale local view (auto hysteresis depends on the compressor state). Ignore
 // telemetry that may have been generated just before our own command.
 void syncChillerPumps(const JsonDocument& data) {
   const char* compressor = data["compressor"] | "";
-  const char* pump1      = data["pump1"] | "";
-  if (compressor[0] == '\0' && pump1[0] == '\0') return;
-  if (millis() - lastPumpCmdMs <= 5000UL) return;
+  const char* pump       = data["outgoing_pump"] | "";
+  if (pump[0] == '\0') pump = data["pump1"] | "";  // older chiller firmware
+  if (compressor[0] == '\0' && pump[0] == '\0') return;
 
-  const bool peerOn = pump1[0] != '\0'
-                          ? (strcmp(pump1, "on") == 0)
-                          : (strcmp(compressor, "on") == 0);
-  if (peerOn != pumpsOn) {
-    pumpsOn = peerOn;
+  if (compressor[0] != '\0') {
+    chillerCompressorOn = strcmp(compressor, "on") == 0;
+    chillerOutputsKnown = true;
+  }
+  if (pump[0] != '\0') {
+    chillerOutgoingPumpOn = strcmp(pump, "on") == 0;
+    chillerOutputsKnown = true;
+  }
+
+  if (millis() - lastPumpCmdMs <= 5000UL) return;
+  if (compressor[0] != '\0' && chillerCompressorOn != pumpsOn) {
+    pumpsOn = chillerCompressorOn;
     pumpCmdPending = false;
-    Serial.printf("[sync] chiller reports pumps %s\n", peerOn ? "on" : "off");
+    Serial.printf("[sync] chiller reports compressor %s\n",
+                  pumpsOn ? "on" : "off");
   }
 }
 
@@ -458,8 +498,16 @@ void handleIncoming(IncomingMessage& msg) {
     }
   } else if (msg.type == MsgType::Status) {
     // A peer rebooted (or just came up): restore the state it cannot know.
-    if (msg.src == "chiller") sendPumpCmd(pumpsOn);
-    else if (msg.src == "dh") sendDhConfig();
+    if (msg.src == "chiller") {
+      if (getCtrlMode() == "manual" && manualOutputsKnown) {
+        sendCompressorCmd(manualCompressorOn);
+        sendOutgoingPumpCmd(manualOutgoingPumpOn);
+      } else {
+        sendPumpCmd(pumpsOn);
+      }
+    } else if (msg.src == "dh") {
+      sendDhConfig();
+    }
   }
 }
 
@@ -533,29 +581,75 @@ void onConfigStream(MultiPathStream stream) {
   }
 }
 
+static bool parseSwitchValue(String value, bool& ok) {
+  value.replace("\"", "");
+  value.trim();
+  if (value == "on" || value == "true" || value == "1") {
+    ok = true;
+    return true;
+  }
+  if (value == "off" || value == "false" || value == "0") {
+    ok = true;
+    return false;
+  }
+  ok = false;
+  return false;
+}
+
 // ── Control Stream Callback (SmartFan MultiPathStream style) ──
 void onControlStream(MultiPathStream stream) {
   Serial.printf("[control] %s -> %s\n", stream.dataPath.c_str(), stream.value.c_str());
 
-  // Handle pumps on/off command
+  // Combined command (old app / API). In manual mode it drives both outputs.
   if (stream.get("/pumps")) {
-    String val = stream.value;
-    val.replace("\"", "");
-    val.trim();
-
-    bool cmdOn = (val == "on" || val == "true" || val == "1");
-    bool cmdOff = (val == "off" || val == "false" || val == "0");
-
-    if (cmdOn && !pumpsOn) {
-      Serial.println("[control] Pumps ON commanded from dashboard");
-      pumpsOn = true;
+    bool ok = false;
+    const bool on = parseSwitchValue(stream.value, ok);
+    if (ok) {
+      manualCompressorOn = on;
+      manualOutgoingPumpOn = on;
+      manualOutputsKnown = true;
+      manualCmdPending = true;
+      pumpsOn = on;
       pumpCmdPending = false;
-      sendPumpCmd(true);
-    } else if (cmdOff && pumpsOn) {
-      Serial.println("[control] Pumps OFF commanded from dashboard");
-      pumpsOn = false;
-      pumpCmdPending = false;
-      sendPumpCmd(false);
+      if (getCtrlMode() == "manual") {
+        Serial.printf("[control] both outputs %s commanded from dashboard\n",
+                      on ? "ON" : "OFF");
+        sendPumpCmd(on);
+      }
+    }
+  }
+
+  // Manual mode: SSR1 = compressor + condenser fan (+ chiller pump).
+  if (stream.get("/compressor")) {
+    bool ok = false;
+    const bool on = parseSwitchValue(stream.value, ok);
+    if (ok) {
+      manualCompressorOn = on;
+      manualOutputsKnown = true;
+      manualCmdPending = true;
+      chillerCompressorOn = on;
+      if (getCtrlMode() == "manual") {
+        Serial.printf("[control] compressor + fan %s commanded from dashboard\n",
+                      on ? "ON" : "OFF");
+        sendCompressorCmd(on);
+      }
+    }
+  }
+
+  // Manual mode: SSR2 = outgoing pump.
+  if (stream.get("/outgoing_pump")) {
+    bool ok = false;
+    const bool on = parseSwitchValue(stream.value, ok);
+    if (ok) {
+      manualOutgoingPumpOn = on;
+      manualOutputsKnown = true;
+      manualCmdPending = true;
+      chillerOutgoingPumpOn = on;
+      if (getCtrlMode() == "manual") {
+        Serial.printf("[control] outgoing pump %s commanded from dashboard\n",
+                      on ? "ON" : "OFF");
+        sendOutgoingPumpCmd(on);
+      }
     }
   }
 
@@ -572,8 +666,16 @@ void onControlStream(MultiPathStream stream) {
       setCtrlMode(newMode);
 
       if (newMode == "manual") {
+        // Adopt what the plant is currently doing. The app writes the same
+        // two states together with the mode switch, so stale commands from an
+        // earlier manual session cannot start the compressor unexpectedly.
+        manualCompressorOn = chillerCompressorOn;
+        manualOutgoingPumpOn = chillerOutgoingPumpOn;
+        manualOutputsKnown = chillerOutputsKnown;
+        manualCmdPending = false;
         Serial.println("[control] Switched to MANUAL mode");
       } else {
+        autoSyncPending = true;
         Serial.println("[control] Switched to AUTO mode");
       }
     }
@@ -667,7 +769,9 @@ void printTestHelp() {
   Serial.println("wifi                  - WiFi status (SSID / IP / RSSI / MAC)");
   Serial.println("wx                    - fetch outdoor weather now");
   Serial.println("mode manual|auto      - switch control mode");
-  Serial.println("pumps on|off          - send pump cmd to chiller (ESP-NOW TX test)");
+  Serial.println("pumps on|off          - send combined set_pumps to chiller (ESP-NOW TX test)");
+  Serial.println("compressor on|off     - send SSR1 compressor + condenser fan cmd");
+  Serial.println("outgoing on|off       - send SSR2 outgoing pump cmd");
   Serial.println("espnow chiller|dh     - send test ping over ESP-NOW");
   Serial.println("status                - dump current inputs / control state");
   Serial.println("reboot                - restart the ESP32");
@@ -801,8 +905,16 @@ void handleSerialCommand() {
     m.trim();
     if (m == "manual" || m == "auto") {
       setCtrlMode(m);
-      Serial.printf("[test] mode -> %s\n", m.c_str());
-      if (m == "manual") Serial.println("[test] auto pump control is now suspended");
+      if (m == "manual") {
+        manualCompressorOn = chillerCompressorOn;
+        manualOutgoingPumpOn = chillerOutgoingPumpOn;
+        manualOutputsKnown = chillerOutputsKnown;
+        manualCmdPending = false;
+        Serial.println("[test] mode -> manual (auto pump control suspended)");
+      } else {
+        autoSyncPending = true;
+        Serial.println("[test] mode -> auto");
+      }
     } else {
       Serial.println("[test] usage: mode manual | mode auto");
     }
@@ -813,6 +925,9 @@ void handleSerialCommand() {
     if (v == "on" || v == "off") {
       bool on = (v == "on");
       pumpsOn = on;
+      manualCompressorOn = on;
+      manualOutgoingPumpOn = on;
+      manualOutputsKnown = true;
       pumpCmdPending = false;
       sendPumpCmd(on);
       if (getCtrlMode() != "manual") {
@@ -820,6 +935,38 @@ void handleSerialCommand() {
       }
     } else {
       Serial.println("[test] usage: pumps on | pumps off");
+    }
+
+  } else if (cmd.startsWith("compressor ")) {
+    String v = cmd.substring(11);
+    v.trim();
+    if (v == "on" || v == "off") {
+      bool on = (v == "on");
+      manualCompressorOn = on;
+      manualOutputsKnown = true;
+      chillerCompressorOn = on;
+      sendCompressorCmd(on);
+      if (getCtrlMode() != "manual") {
+        Serial.println("[test] note: mode is AUTO - control loop may override this; send 'mode manual' first");
+      }
+    } else {
+      Serial.println("[test] usage: compressor on | compressor off");
+    }
+
+  } else if (cmd.startsWith("outgoing ")) {
+    String v = cmd.substring(9);
+    v.trim();
+    if (v == "on" || v == "off") {
+      bool on = (v == "on");
+      manualOutgoingPumpOn = on;
+      manualOutputsKnown = true;
+      chillerOutgoingPumpOn = on;
+      sendOutgoingPumpCmd(on);
+      if (getCtrlMode() != "manual") {
+        Serial.println("[test] note: mode is AUTO - control loop may override this; send 'mode manual' first");
+      }
+    } else {
+      Serial.println("[test] usage: outgoing on | outgoing off");
     }
 
   } else if (cmd.startsWith("espnow ")) {
@@ -1011,25 +1158,39 @@ void loop() {
     wxRequestDue = true;  // HTTPS fetch runs on the cloud task (big stack)
   }
 
+  const String mode = getCtrlMode();
   ControlDecision d = ClimateControl::decidePumps(inputs, params, pumpsOn);
 
-  // Only auto-control pumps when in auto mode (or no mode set yet)
-  if (getCtrlMode() != "manual") {
-    if (d.pumpsOn != pumpsOn) {
+  // Only auto-control the outputs when in auto mode (or no mode set yet).
+  if (mode != "manual") {
+    if (autoSyncPending || d.pumpsOn != pumpsOn) {
       pumpsOn = d.pumpsOn;
+      autoSyncPending = false;
       pumpCmdPending = false;
       sendPumpCmd(pumpsOn);
     }
-  }
 
-  // Send the first command after boot, then re-send the current state every
-  // minute. `set_pumps` is idempotent on the chiller; this recovers a command
-  // lost during a Wi-Fi scan or a chiller reboot.
-  if (pumpCmdPending) {
-    pumpCmdPending = false;
-    sendPumpCmd(pumpsOn);
-  } else if (millis() - lastPumpCmdMs >= PUMP_CMD_RESEND_S * 1000UL) {
-    sendPumpCmd(pumpsOn);
+    // Send the first command after boot, then re-send the current state every
+    // minute. `set_pumps` is idempotent on the chiller; this recovers a command
+    // lost during a Wi-Fi scan or a chiller reboot.
+    if (pumpCmdPending) {
+      pumpCmdPending = false;
+      sendPumpCmd(pumpsOn);
+    } else if (millis() - lastPumpCmdMs >= PUMP_CMD_RESEND_S * 1000UL) {
+      sendPumpCmd(pumpsOn);
+    }
+  } else if (manualCmdPending) {
+    // Immediately assert the manual outputs after an app command / mode change.
+    manualCmdPending = false;
+    if (manualOutputsKnown) {
+      sendCompressorCmd(manualCompressorOn);
+      sendOutgoingPumpCmd(manualOutgoingPumpOn);
+    }
+  } else if (manualOutputsKnown &&
+             millis() - lastPumpCmdMs >= PUMP_CMD_RESEND_S * 1000UL) {
+    // Keep the two outputs alive even if one ESP-NOW frame was lost.
+    sendCompressorCmd(manualCompressorOn);
+    sendOutgoingPumpCmd(manualOutgoingPumpOn);
   }
 
   static int lastControlSource = -1;
@@ -1070,7 +1231,9 @@ void loop() {
       tel["dew_point_c"]    = d.refDewPointC;
       tel["water_floor_c"]  = d.waterFloorC;
       tel["pumps"]          = pumpsOn ? "on" : "off";
-      String mode = getCtrlMode();
+      tel["compressor"]     = chillerCompressorOn ? "on" : "off";
+      tel["condenser_fan"]  = chillerCompressorOn ? "on" : "off";
+      tel["outgoing_pump"]  = chillerOutgoingPumpOn ? "on" : "off";
       tel["mode"]           = mode.length() > 0 ? mode : "auto";
       tel["ts"]             = nowUnix();
       char json[512];

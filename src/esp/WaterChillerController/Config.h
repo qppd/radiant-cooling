@@ -9,7 +9,7 @@ static const char DEVICE_ID[] = "chiller";
 // Scanned live via `esptool read_mac` on COM3 + `wifi` console cmd.
 static const uint8_t GATEWAY_MAC[] = { 0x20, 0x50, 0x0D, 0x1B, 0x9E, 0xF4 };
 
-static const uint8_t TELEMETRY_S  = 30;
+static const uint8_t TELEMETRY_S  = 5;
 
 // ESP-NOW channel this peer pins its radio to. It never joins an AP, so
 // without this it idles on channel 1 while the gateway follows the router -

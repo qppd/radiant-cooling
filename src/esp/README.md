@@ -9,7 +9,7 @@ only (wiring + control logic).
 | Folder                     | Hardware                                                     | Role     |
 | -------------------------- | ------------------------------------------------------------ | -------- |
 | `RadiantCoolingMonitor/`   | 4x DS18B20 ceiling sensors (one 1-Wire bus each: 23/21/18/5) + WiFi reset button (25) | Gateway  |
-| `WaterChillerController/`  | 2x DS18B20 tank sensors (out=5, in=18), compressor SSR (23), pump relay (19) | Peer     |
+| `WaterChillerController/`  | 2x DS18B20 tank sensors (out=5, in=18), SSR1 compressor + condenser fan + chiller pump (23), SSR2 outgoing pump (19) | Peer     |
 | `DehumidifierController/`  | DHT22 (GPIO25), 1x SSR (GPIO23) -> dehumidifier          | Peer     |
 
 ## Module layout (same pattern in every sketch folder)
@@ -153,17 +153,22 @@ email/password (not anonymous) when those rules are used.
   bus each: sensors 1-2 feed the supply/return telemetry), caches
   the latest peer readings for the chiller computation, forwards peer
   `telemetry`/`state` to Firebase, publishes its own telemetry + a retained
-  heartbeat (`radiant/heartbeat/monitor`, includes the Wi-Fi channel), sends
-  `set_pumps` on decision changes, **re-sends the current command every**
-  `PUMP_CMD_RESEND_S` (60 s) to survive a lost frame or chiller reboot, and
-  applies or forwards `radiant/config` stream changes. After a gateway reboot
-  it adopts the chiller's reported output state and re-sends the cached DH
-  config, so the two ends resynchronise without the cloud. Cooling demand
+  heartbeat (`radiant/heartbeat/monitor`, includes the Wi-Fi channel). In
+  **auto** it sends `set_pumps` on decision changes (both outputs together);
+  in **manual** it forwards the app's independent `set_compressor` and
+  `set_outgoing_pump` commands. Either way it **re-sends the current command
+  every** `PUMP_CMD_RESEND_S` (60 s) to survive a lost frame or chiller
+  reboot, and applies or forwards `radiant/config` stream changes. After a
+  gateway reboot it adopts the chiller's reported output state and re-sends
+  the cached DH config, so the two ends resynchronise without the cloud.
+  Cooling demand
   comes from the dehumidifier's DHT22 indoor temperature; the
   anti-condensation floor protects the coldest pipe/tank.
-- **Chiller** executes `set_pumps` (`on`/`off`), reports a `state` message
-  on pump changes, and streams `water_temp_c` telemetry every
-  `TELEMETRY_S`.
+- **Chiller** executes `set_pumps` (both outputs), or the manual-only
+  `set_compressor` (SSR1: compressor + condenser fan + chiller pump) and
+  `set_outgoing_pump` (SSR2). It reports a `state` message on output changes,
+  including `condenser_fan` and `outgoing_pump` aliases, and streams
+  `water_temp_c` telemetry every `TELEMETRY_S`.
 - **Dehumidifier** applies `config` (setpoint/deadband) and `cmd`
   (`set_humidity_target`, `enable`/`disable`, `reset`), runs the 55 %%RH
   hysteresis loop, and streams `temp_c`/`humidity_pct` telemetry. After 3
@@ -184,14 +189,17 @@ command chain, polled at the top of `loop()`. Open the Serial Monitor at
 | `wifi` | monitor | WiFi link (SSID / IP / RSSI / MAC) plus Firebase/weather state and both radio channels |
 | `wx` | monitor | WeatherAPI fetch on demand (updates the cached outdoor inputs) |
 | `mode manual\|auto` | monitor | suspend/resume auto pump control |
-| `pumps on\|off` | monitor | ESP-NOW TX to the chiller (`set_pumps`) |
+| `pumps on\|off` | monitor | ESP-NOW TX to the chiller (`set_pumps`, both outputs) |
+| `compressor on\|off` | monitor | ESP-NOW TX `set_compressor` (SSR1) |
+| `outgoing on\|off` | monitor | ESP-NOW TX `set_outgoing_pump` (SSR2) |
 | `espnow chiller\|dh` | monitor | ESP-NOW ping (`cmd: ping`) - peers log `unknown cmd: ping` on arrival; TX result prints as `[espnow] tx OK -> ..` |
 | `status`, `reboot` | monitor | dump current inputs/control state, restart |
 | `temps`, `temp outgoing\|ingoing` | chiller | both tank DS18B20 sensors (out=GPIO 5, in=GPIO 18) with DISCONNECTED / 85 °C / out-of-range diagnostics |
-| `ssr` | chiller | compressor + pump relay output states (GPIO 23 / 19) |
-| `compressor on\|off\|toggle` | chiller | compressor SSR (GPIO 23) by hand |
-| `pump1 on\|off\|toggle` | chiller | the pump relay (GPIO 19) by hand |
-| `outputs on\|off` | chiller | compressor + pump together via `setPumps()` - also sends a `state` frame to the gateway |
+| `ssr` | chiller | SSR1 compressor/fan + SSR2 outgoing pump states (GPIO 23 / 19) |
+| `compressor on\|off\|toggle` | chiller | SSR1: compressor + condenser fan (+ chiller pump) by hand |
+| `outgoing on\|off\|toggle` | chiller | SSR2: outgoing pump by hand |
+| `pump1 on\|off\|toggle` | chiller | alias for the outgoing pump (GPIO 19) |
+| `outputs on\|off` | chiller | both SSRs together via `setPumps()` - also sends a `state` frame to the gateway |
 | `espnow` | chiller | status frame to the gateway (link test) |
 | `status`, `reboot` | chiller | fresh sensor read + output states, restart |
 | `dht`, `dht test` | dehumidifier | DHT22 single read, or 5 samples 2 s apart (stability) |

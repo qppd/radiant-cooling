@@ -24,7 +24,7 @@ class DeviceWatchdog {
   final String systemId;
 
   /// How long a device may be silent before it is marked offline. Every board
-  /// reports on a 30 s cycle, so 90 s tolerates two lost cycles.
+  /// reports on a 5 s cycle, so 90 s tolerates many lost cycles.
   final Duration staleAfter;
 
   final Duration sweepInterval;

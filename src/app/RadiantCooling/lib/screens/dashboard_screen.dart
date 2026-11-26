@@ -250,7 +250,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             title: 'Control',
             icon: Icons.power_settings_new,
             // Streamed straight off the control node the app writes, so a
-            // toggle is reflected immediately instead of after the next 30 s
+            // toggle is reflected immediately instead of after the next 5 s
             // telemetry cycle. Monitor telemetry stays the source for what
             // the gateway decided on its own.
             child: StreamBuilder<ControlState>(

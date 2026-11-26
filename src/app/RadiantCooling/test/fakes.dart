@@ -83,18 +83,18 @@ class FakeRadiantFirebase extends RadiantFirebase {
     ControlState? controlState,
     WeatherNow? weatherNow,
     String? weatherKey,
-  }) : _monitor = monitor,
-       _chiller = chiller,
-       _dh = dh,
-       _dhState = dhState,
-       _chillerState = chillerState,
-       _heartbeat = heartbeat,
-       _controlParams = controlParams,
-       _dhConfig = dhConfig,
-       _controlState = controlState,
-       _weatherNow = weatherNow,
-       _weatherKey = weatherKey,
-       super();
+  })  : _monitor = monitor,
+        _chiller = chiller,
+        _dh = dh,
+        _dhState = dhState,
+        _chillerState = chillerState,
+        _heartbeat = heartbeat,
+        _controlParams = controlParams,
+        _dhConfig = dhConfig,
+        _controlState = controlState,
+        _weatherNow = weatherNow,
+        _weatherKey = weatherKey,
+        super();
 
   static Stream<T> _value<T>(T? value) =>
       value == null ? Stream<T>.empty() : Stream<T>.value(value);
@@ -114,6 +114,10 @@ class FakeRadiantFirebase extends RadiantFirebase {
   ControlParams? lastControlParamsWrite;
   DhConfig? lastDhConfigWrite;
   bool? lastPumpsWrite;
+  bool? lastCompressorWrite;
+  bool? lastOutgoingPumpWrite;
+  bool? lastManualCompressorWrite;
+  bool? lastManualOutgoingPumpWrite;
   String? lastModeWrite;
 
   /// Every liveness verdict the watchdog published.
@@ -158,6 +162,22 @@ class FakeRadiantFirebase extends RadiantFirebase {
   Future<void> setPumps(bool on) async => lastPumpsWrite = on;
 
   @override
+  Future<void> setCompressor(bool on) async => lastCompressorWrite = on;
+
+  @override
+  Future<void> setOutgoingPump(bool on) async => lastOutgoingPumpWrite = on;
+
+  @override
+  Future<void> enterManualMode({
+    required bool compressorOn,
+    required bool outgoingPumpOn,
+  }) async {
+    lastManualCompressorWrite = compressorOn;
+    lastManualOutgoingPumpWrite = outgoingPumpOn;
+    lastModeWrite = 'manual';
+  }
+
+  @override
   Future<void> setMode(String mode) async => lastModeWrite = mode;
 
   @override
@@ -168,13 +188,15 @@ class FakeRadiantFirebase extends RadiantFirebase {
     String? parent,
     int? lastSeenTs,
   }) async {
-    deviceOnlineWrites.add(DeviceOnlineWrite(
-      device,
-      online,
-      role: role,
-      parent: parent,
-      lastSeenTs: lastSeenTs,
-    ));
+    deviceOnlineWrites.add(
+      DeviceOnlineWrite(
+        device,
+        online,
+        role: role,
+        parent: parent,
+        lastSeenTs: lastSeenTs,
+      ),
+    );
   }
 
   @override

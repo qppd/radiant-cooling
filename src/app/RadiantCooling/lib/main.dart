@@ -176,7 +176,7 @@ class _HomeShellState extends State<HomeShell> {
   int _unreadAlertCount = 0;
 
   // Latest readings from each stream (they arrive independently, on their
-  // own ~30 s cycles) merged into one logged point.
+  // own ~5 s cycles) merged into one logged point.
   MonitorTelemetry? _lastMonitor;
   ChillerTelemetry? _lastChiller;
   DhTelemetry? _lastDh;

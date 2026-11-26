@@ -1,7 +1,8 @@
 #pragma once
 #include <Arduino.h>
 
-// 1x compressor SSR + 1x pump relay (single pump loop)
+// Output 1: compressor + condenser fan (+ chiller pump), all in parallel on
+// one SSR. Output 2: the outgoing pump relay.
 static const uint8_t PIN_SSR_COMPRESSOR = 23;
 static const uint8_t PIN_RELAY_PUMP1    = 19;
 

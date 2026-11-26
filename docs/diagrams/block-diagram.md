@@ -9,7 +9,7 @@
 | Board                        | Sensors                              | Actuators (SSR)              | Role     |
 | ---------------------------- | ------------------------------------ | ---------------------------- | -------- |
 | `RadiantCoolingMonitor`      | 4x DS18B20 ceiling (one 1-Wire bus each) | —                     | Gateway  |
-| `WaterChillerController`     | 2x DS18B20 tank (out/in)     | 2x SSR → compressor + pump  | Peer     |
+| `WaterChillerController`     | 2x DS18B20 tank (out/in)     | 2x SSR: compressor + condenser fan + chiller pump (1), outgoing pump (2) | Peer |
 | `DehumidifierController`     | 1x DHT22 (temp + humidity)           | 1x SSR → dehumidifier        | Peer     |
 
 ## Diagram
@@ -39,8 +39,8 @@ flowchart LR
     end
 
     subgraph ACT["Actuators (SSR)"]
-        P1["Compressor"]
-        P2["Water Pump"]
+        P1["Compressor + condenser fan<br/>(+ chiller pump)"]
+        P2["Outgoing pump"]
         DHU["Dehumidifier"]
     end
 
@@ -87,13 +87,14 @@ flowchart LR
 | Block                    | Role                | Description                                          |
 | ------------------------ | ------------------- | ---------------------------------------------------- |
 | `RadiantCoolingMonitor`  | **Gateway**         | Wi-Fi + Firebase + ESP-NOW; reads 4x ceiling DS18B20 |
-| `WaterChillerController` | ESP-NOW peer        | Reads 2x DS18B20 (tank); controls compressor + pump via 2 SSRs |
+| `WaterChillerController` | ESP-NOW peer        | Reads 2x DS18B20 (tank); controls SSR1 (compressor + condenser fan + chiller pump) and SSR2 (outgoing pump) |
 | `DehumidifierController` | ESP-NOW peer        | Reads 1x DHT22; controls dehumidifier via 1 SSR      |
 | 4x DS18B20               | Sensor              | Ceiling pipe temps (monitor), one 1-Wire bus each    |
 | 2x DS18B20               | Sensor              | Chiller tank water: outgoing + ingoing                |
 | 1x DHT22                 | Sensor              | Temperature + humidity for dew-point control         |
 | WiFi reset button        | Control             | GPIO 25 → GND; hold 3 s to erase WiFi credentials    |
-| Compressor + pump        | Actuator            | Circulate chilled water (SSR-controlled)             |
+| Compressor + fan + pump  | Actuator            | SSR1: compressor + condenser fan + chiller pump (parallel) |
+| Outgoing pump            | Actuator            | SSR2: circulates chilled water through the floor loop |
 | Dehumidifier             | Actuator            | Removes humidity (SSR-controlled)                    |
 | Power supplies (3)       | Power               | One 220V→5V/3A supply per board (isolated)           |
 | Firebase RTDB            | Cloud               | Shared database for app and firmware                 |

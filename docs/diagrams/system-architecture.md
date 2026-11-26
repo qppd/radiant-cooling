@@ -12,7 +12,7 @@ The system is organized into four logical layers:
 | Application    | `RadiantCooling` Flutter app (Android)                   | Monitoring, configuration, user interface     |
 | Cloud          | Firebase Realtime Database + WeatherAPI.com               | **Optional** shared data store; outdoor dew point when available |
 | Controllers    | ESP32 — `RadiantCoolingMonitor` (**gateway**), `WaterChillerController`, `DehumidifierController` | Local control loops, sensing, actuation |
-| Plant          | Water pumps (2, SSR), dehumidifier (SSR), DS18B20 + DHT22 sensors | Physical HVAC equipment                       |
+| Plant          | Compressor + condenser fan + chiller pump (SSR1), outgoing pump (SSR2), dehumidifier (SSR), DS18B20 + DHT22 sensors | Physical HVAC equipment |
 
 **Key point:** the three ESP32 boards talk to each other over **ESP-NOW**
 (no router or broker needed). Only `RadiantCoolingMonitor` connects to
@@ -44,8 +44,8 @@ flowchart TB
         T6["4x DS18B20<br/>(1-Wire, one bus each)"]
         T1["1x DS18B20<br/>(water temp)"]
         DHT["DHT22<br/>(temp + humidity)"]
-        P1["Water Pump 1"]
-        P2["Water Pump 2"]
+        P1["Compressor + condenser fan<br/>(+ chiller pump, SSR1)"]
+        P2["Outgoing pump<br/>(SSR2)"]
         DH["Dehumidifier"]
         LOOP["Radiant Cooling Loop"]
     end
@@ -89,6 +89,11 @@ flowchart TB
   immediately, re-initialises Firebase with backoff, and resumes telemetry +
   config streaming. NVS retains the last tunable settings across an offline
   power cycle.
+
+- **Manual outputs:** in manual mode the dashboard writes `compressor`
+  (SSR1: compressor + condenser fan + chiller pump) and `outgoing_pump`
+  (SSR2) independently; auto mode keeps both outputs on the computed
+  `set_pumps` path.
 
 ## Notes
 
